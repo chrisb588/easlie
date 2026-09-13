@@ -1,3 +1,26 @@
 <resources>
     <string name="app_name">easlie</string>
+    <string name="floating_board_title">Floating board feasibility</string>
+    <string name="floating_board_permission_explanation">easlie needs the display-over-other-apps permission to keep a reference board visible while you work in another app. You can change this permission in Android Settings. Android may also ask for notification permission so the active board can show its ongoing notification.</string>
+    <string name="floating_board_full_screen_note">If you deny this permission, the full-screen easlie board remains usable.</string>
+    <string name="open_overlay_settings">Open overlay settings</string>
+    <string name="start_floating_board">Start floating board</string>
+    <string name="floating_board_permission_granted">Overlay permission granted. Start the feasibility board when you are ready.</string>
+    <string name="floating_board_permission_denied">Overlay permission is not granted. The full-screen board is still available.</string>
+    <string name="floating_board_start_failed">Could not start the floating board: %1$s</string>
+    <string name="floating_board_attach_failed">The floating board window could not be attached.</string>
+    <string name="floating_board_unknown_error">The service did not report why startup failed.</string>
+    <string name="foreground_service_special_use_subtype">Keeps the user-selected easlie reference board visible as a movable, resizable overlay while the user works in another app.</string>
+    <string name="floating_board_notification_title">easlie floating board</string>
+    <string name="floating_board_notification_text">The reference board is visible above other apps.</string>
+    <string name="return_to_easlie">Return to easlie</string>
+    <string name="stop_floating_board">Stop floating board</string>
+    <string name="floating_board_overlay_label">Floating reference board</string>
+    <string name="floating_board_move_label">Move floating board</string>
+    <string name="floating_board_resize_label">Resize floating board</string>
+    <string name="floating_board_close_label">Close floating board</string>
+    <string name="floating_board_return_label">Return to full-screen mode</string>
+    <string name="floating_board_drag_hint">Drag this header to move</string>
+    <string name="floating_board_resize_hint">Drag the corner to resize</string>
+    <string name="floating_board_content">Minimal feasibility board\nMove with the header and resize from the lower-right corner.</string>
 </resources>
