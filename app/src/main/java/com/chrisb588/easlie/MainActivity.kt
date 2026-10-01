@@ -31,6 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.EaslieTheme
 
 class MainActivity : ComponentActivity() {
@@ -176,6 +177,8 @@ private fun FloatingBoardScreen(
                 color = MaterialTheme.colorScheme.error
             )
         }
+
+        FullScreenCanvas(modifier = Modifier.weight(1f))
     }
 }
 
