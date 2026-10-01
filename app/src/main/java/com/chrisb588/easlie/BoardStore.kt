@@ -1,6 +1,8 @@
 package com.chrisb588.easlie
 
 import android.app.Application
+import android.app.ActivityManager
+import android.content.Context
 import android.content.ContentResolver
 import android.net.Uri
 import android.util.Log
@@ -8,9 +10,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import com.chrisb588.easlie.canvas.*
-import com.chrisb588.easlie.images.loadImage
+import com.chrisb588.easlie.images.ImageRenderer
+import com.chrisb588.easlie.images.ImageSource
+import com.chrisb588.easlie.images.copyImageSource
+import com.chrisb588.easlie.images.readImageSource
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.*
@@ -18,15 +22,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class EaslieApplication : Application() {
-    val board by lazy { BoardStore(File(filesDir, "board")) }
+    val board by lazy {
+        val memoryClass = (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).memoryClass
+        BoardStore(File(filesDir, "board"), memoryClass.toLong() * 1024 * 1024 / 8)
+    }
 }
 
 /** One authoritative board. All edits and disk snapshots pass through the same mutex. */
-class BoardStore internal constructor(directory: File? = null) {
+class BoardStore internal constructor(directory: File? = null, cacheBudget: Long = 16L * 1024 * 1024) {
     var items by mutableStateOf<List<BoardItem>>(emptyList())
         private set
-    var images by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
-        private set
+    val images: Map<String, ImageBitmap> get() = renderer.images
     private var fullScreen by mutableStateOf(CanvasViewport())
     private var floating by mutableStateOf(CanvasViewport())
     var viewport: CanvasViewport
@@ -45,6 +51,8 @@ class BoardStore internal constructor(directory: File? = null) {
 
     private val storage = directory?.let { BoardStorage(it) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val renderer = ImageRenderer(scope, cacheBudget)
+    private val sources = mutableMapOf<String, ImageSource>()
     private val mutex = Mutex()
     private val pending = ArrayDeque<Pair<ContentResolver, List<Uri>>>()
     private var writable = true
@@ -61,12 +69,11 @@ class BoardStore internal constructor(directory: File? = null) {
                         fullScreen = restored.snapshot.fullScreen
                         floating = restored.snapshot.floating
                         var skipped = restored.skipped
-                        val restoredImages = mutableMapOf<String, ImageBitmap>()
                         val restoredItems = mutableListOf<BoardItem>()
                         for (item in restored.snapshot.items) {
                             try {
-                                val bitmap = withContext(Dispatchers.IO) { loadImage(storage!!.asset(item.assetId)) }
-                                restoredImages[item.id] = bitmap.asImageBitmap()
+                                val source = withContext(Dispatchers.IO) { readImageSource(storage!!.asset(item.assetId)) }
+                                sources[item.id] = source
                                 restoredItems.add(item)
                             } catch (failure: Exception) {
                                 skipped++
@@ -74,7 +81,6 @@ class BoardStore internal constructor(directory: File? = null) {
                             }
                         }
                         items = restoredItems
-                        images = restoredImages
                         if (skipped > 0) message = "$skipped item(s) could not be restored: missing, invalid, or unreadable data."
                         // A later background scan must also preserve referenced but undecodable assets.
                         reconciliationReferences = restored.snapshot.items.map { it.assetId }.toSet()
@@ -153,14 +159,21 @@ class BoardStore internal constructor(directory: File? = null) {
                 try {
                     val remaining = persist(items.filterNot { it.id == id })
                     items = remaining
-                    images = images - id
+                    renderer.remove(id)
+                    val source = sources.remove(id)
                     if (remaining.none { it.assetId == item.assetId }) {
-                        withContext(Dispatchers.IO) { storage?.asset(item.assetId)?.delete() }
+                        withContext(Dispatchers.IO) { (storage?.asset(item.assetId) ?: source?.file)?.delete() }
                     }
                 } catch (failure: Exception) { message = "Image could not be deleted: ${failure.message}" }
             }
         }
     }
+
+    fun refreshImages(density: Float) {
+        renderer.refresh(items, sources, viewport, windowSize, density)
+    }
+
+    fun releaseImages() { renderer.clear() }
 
     fun enqueueImport(resolver: ContentResolver, uris: List<Uri>) {
         if (uris.isEmpty()) return
@@ -186,29 +199,39 @@ class BoardStore internal constructor(directory: File? = null) {
                         val asset = try {
                             mutex.withLock {
                                 withContext(Dispatchers.IO) {
-                                    storage?.import(resolver, uri) ?: ImportedAsset(UUID.randomUUID().toString(), loadImage(resolver, uri))
-                                }.also { reconciliationReferences = reconciliationReferences + it.id }
+                                    if (storage != null) {
+                                        val imported = storage.import(resolver, uri)
+                                        try {
+                                            imported.id to readImageSource(storage.asset(imported.id))
+                                        } catch (failure: Exception) {
+                                            storage.asset(imported.id).delete()
+                                            throw failure
+                                        } finally { imported.bitmap.recycle() }
+                                    } else {
+                                        UUID.randomUUID().toString() to copyImageSource(resolver, uri, null)
+                                    }
+                                }.also { reconciliationReferences = reconciliationReferences + it.first }
                             }
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { rejected++; continue }
                         mutex.withLock {
                             try {
+                                val (assetId, source) = asset
                                 val center = importCenters(accepted + 1, viewport, windowSize).last()
                                 val maxDimension = minOf(windowSize.width, windowSize.height) * 0.4f / viewport.zoom
-                                val scale = maxDimension / maxOf(asset.bitmap.width, asset.bitmap.height)
+                                val scale = maxDimension / maxOf(source.width, source.height)
                                 val existing = if ((items.maxOfOrNull { it.zIndex } ?: 0) > Int.MAX_VALUE - 10) {
                                     normalizedStack(items)
                                 } else items
                                 val id = UUID.randomUUID().toString()
-                                val item = BoardItem(id, center, asset.bitmap.width * scale, asset.bitmap.height * scale,
-                                    zIndex = (existing.maxOfOrNull { it.zIndex } ?: 0) + 10, assetId = asset.id)
+                                val item = BoardItem(id, center, source.width * scale, source.height * scale,
+                                    zIndex = (existing.maxOfOrNull { it.zIndex } ?: 0) + 10, assetId = assetId)
                                 val committed = persist(existing + item)
+                                sources[id] = source
                                 items = committed
-                                images = images + (id to asset.bitmap.asImageBitmap())
                                 accepted++
                             } catch (failure: Exception) {
-                                withContext(Dispatchers.IO) { storage?.asset(asset.id)?.delete() }
-                                asset.bitmap.recycle()
+                                withContext(Dispatchers.IO) { asset.second.file.delete() }
                                 rejected++
                             }
                         }

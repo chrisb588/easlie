@@ -16,6 +16,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,8 +39,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clipToBounds
 import com.chrisb588.easlie.BoardStore
 import kotlin.math.roundToInt
+import com.chrisb588.easlie.images.intersects
 
 object CanvasTestTags {
     const val FullScreenBoard = "full-screen-board"
@@ -50,10 +54,16 @@ private val corners = listOf(Handle(-1f, -1f), Handle(1f, -1f), Handle(1f, 1f), 
 
 @Composable
 fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
-    DisposableEffect(board) { onDispose { board.save() } }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var menuId by remember { mutableStateOf<String?>(null) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current.density
+    LaunchedEffect(board, density) {
+        snapshotFlow { Triple(board.items, board.viewport, board.windowSize) }.collect {
+            board.refreshImages(density)
+        }
+    }
+    DisposableEffect(board) { onDispose { board.save(); board.releaseImages() } }
     val handleRadius = with(LocalDensity.current) { 12.dp.toPx() }
     val rotationGap = with(LocalDensity.current) { 36.dp.toPx() }
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -61,7 +71,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
 
     Box(modifier.fillMaxSize()) {
         Canvas(
-            Modifier.fillMaxSize().background(backgroundColor)
+            Modifier.fillMaxSize().clipToBounds().background(backgroundColor)
                 .onSizeChanged { board.resizeWindow(CanvasSize(it.width.toFloat(), it.height.toFloat())) }
                 .testTag(CanvasTestTags.FullScreenBoard)
                 .semantics { contentDescription = "Reference image board. Tap to select; drag a selected image or its handles. Double-tap for Delete." }
@@ -183,6 +193,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
             val viewport = board.viewport
             val size = CanvasSize(this.size.width, this.size.height)
             for (item in board.items.inStackingOrder()) {
+                if (!item.intersects(viewport, size, 24f * density)) continue
                 val image = board.images[item.id] ?: continue
                 val center = viewport.worldToWindow(item.center, size).toOffset()
                 val width = item.width * viewport.zoom

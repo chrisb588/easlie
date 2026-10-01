@@ -17,10 +17,13 @@ public class IntakeTestProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
 
     @Override public Bundle call(String method, String arg, Bundle extras) {
-        if (!"create-task-fixtures".equals(method)) return super.call(method, arg, extras);
+        boolean clipping = "create-clipping-fixture".equals(method);
+        if (!clipping && !"create-task-fixtures".equals(method)) return super.call(method, arg, extras);
         Bitmap image = Bitmap.createBitmap(100, 50, Bitmap.Config.ARGB_8888);
+        if (clipping) image.eraseColor(android.graphics.Color.RED);
         try {
-            for (String name : new String[]{"task-first.png", "task-second.png"}) {
+            String[] names = clipping ? new String[]{"clipping.png"} : new String[]{"task-first.png", "task-second.png"};
+            for (String name : names) {
                 try (FileOutputStream output = new FileOutputStream(new File(getContext().getFilesDir(), name))) {
                     image.compress(Bitmap.CompressFormat.PNG, 100, output);
                 }
