@@ -20,8 +20,10 @@ Android tests cover URI share payloads, image subsampling and EXIF orientation, 
 
 ## Device validation still required
 
-Issue #3 remains pending, so this change was not assembled into an APK, installed, or launched on the Android device. The instrumentation suite was not executed.
+After rebasing onto `main` containing PR #13, the debug APK was built, installed, and launched on a Samsung SM-X616B running Android 16. The activity remained foregrounded and the crash log was empty. All 21 host unit tests passed, and instrumentation sources compiled. The instrumentation suite was not executed.
 
-After device testing resumes, import several gallery images and share single and multiple images from a browser and an image-focused app. Check that invalid inputs leave the existing board unchanged. Pan and zoom before batch imports to verify center placement, diagonal spacing, and wrapping.
+Lint reports an inherited API-level error in `FloatingBoardService.kt`: the four-argument `Rect.inset` overload requires API 31, but its path is guarded for API 30. This error also exists in the updated `main` and is outside issue #4.
+
+For full acceptance testing, import several gallery images and share single and multiple images from a browser and an image-focused app. Check that invalid inputs leave the existing board unchanged. Pan and zoom before batch imports to verify center placement, diagonal spacing, and wrapping.
 
 Select overlapping images and confirm that the top image receives taps. Confirm that dragging an unselected image leaves it in place, then select it and move it. Resize using each corner after rotation, rotate using the upper handle, and delete through the double-tap menu. Pinch while an image is selected and during an item drag; only the viewport should change once two fingers are active. Rotate the device and confirm that the session survives without replaying the previous share batch.
