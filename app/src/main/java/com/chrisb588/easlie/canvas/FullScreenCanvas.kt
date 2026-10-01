@@ -15,6 +15,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +41,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.chrisb588.easlie.BoardStore
 import kotlin.math.roundToInt
+import com.chrisb588.easlie.images.intersects
 
 object CanvasTestTags {
     const val FullScreenBoard = "full-screen-board"
@@ -52,6 +56,13 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var menuId by remember { mutableStateOf<String?>(null) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current.density
+    LaunchedEffect(board, density) {
+        snapshotFlow { Triple(board.items, board.viewport, board.windowSize) }.collect {
+            board.refreshImages(density)
+        }
+    }
+    DisposableEffect(board) { onDispose { board.releaseImages() } }
     val handleRadius = with(LocalDensity.current) { 12.dp.toPx() }
     val rotationGap = with(LocalDensity.current) { 36.dp.toPx() }
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -179,6 +190,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
             val viewport = board.viewport
             val size = CanvasSize(this.size.width, this.size.height)
             for (item in board.items.inStackingOrder()) {
+                if (!item.intersects(viewport, size, 24f * density)) continue
                 val image = board.images[item.id] ?: continue
                 val center = viewport.worldToWindow(item.center, size).toOffset()
                 val width = item.width * viewport.zoom

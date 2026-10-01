@@ -9,6 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
+import kotlinx.coroutines.runBlocking
 
 class ImageIntakeTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().context
@@ -32,7 +33,7 @@ class ImageIntakeTest {
     }
 
     @Test
-    fun sourcePixelsAreSubsampledAndExifOrientationIsApplied() {
+    fun sourcePixelsAreSubsampledAndExifOrientationIsApplied() = runBlocking {
         val file = File(context.filesDir, "rotated.jpg")
         val original = Bitmap.createBitmap(2400, 1200, Bitmap.Config.ARGB_8888)
         file.outputStream().use { original.compress(Bitmap.CompressFormat.JPEG, 90, it) }
@@ -41,20 +42,22 @@ class ImageIntakeTest {
             setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_90.toString())
             saveAttributes()
         }
-        val loaded = loadImage(context.contentResolver, uri(file.name))
+        val source = copyImageSource(context.contentResolver, uri(file.name), context.cacheDir)
+        val loaded = source.decode(4)
         assertTrue(loaded.height > loaded.width)
         assertTrue(maxOf(loaded.width, loaded.height) <= 1024)
         loaded.recycle()
+        source.file.delete()
         file.delete()
     }
 
     @Test
-    fun unsupportedMissingAndCorruptInputsAreRejected() {
+    fun unsupportedMissingAndCorruptInputsAreRejected() = runBlocking {
         File(context.filesDir, "unsupported.txt").writeText("not an image")
         File(context.filesDir, "corrupt.png").writeText("not a png")
         for (name in listOf("unsupported.txt", "corrupt.png", "missing.png")) {
             try {
-                loadImage(context.contentResolver, uri(name))
+                copyImageSource(context.contentResolver, uri(name), context.cacheDir)
                 fail("Expected rejection of $name")
             } catch (_: Exception) {
                 // A rejected source must never yield a bitmap for the store to append.
