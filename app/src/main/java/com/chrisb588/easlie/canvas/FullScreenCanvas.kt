@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clipToBounds
 import com.chrisb588.easlie.BoardStore
 import kotlin.math.roundToInt
 import com.chrisb588.easlie.images.intersects
@@ -70,7 +71,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
 
     Box(modifier.fillMaxSize()) {
         Canvas(
-            Modifier.fillMaxSize().background(backgroundColor)
+            Modifier.fillMaxSize().clipToBounds().background(backgroundColor)
                 .onSizeChanged { board.resizeWindow(CanvasSize(it.width.toFloat(), it.height.toFloat())) }
                 .testTag(CanvasTestTags.FullScreenBoard)
                 .semantics { contentDescription = "Reference image board. Tap to select; drag a selected image or its handles. Double-tap for Delete." }

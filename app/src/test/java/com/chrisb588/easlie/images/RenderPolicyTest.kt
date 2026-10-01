@@ -46,6 +46,9 @@ class RenderPolicyTest {
         assertTrue(cache.sizeBytes <= cache.budget)
         cache.put("oversized", 11)
         assertNull(cache["oversized"])
+        cache.put("last", 11)
+        assertEquals(4, cache["last"])
+        assertTrue(cache.sizeBytes <= cache.budget)
         cache.remove("visible")
         assertEquals(4L, cache.sizeBytes)
     }

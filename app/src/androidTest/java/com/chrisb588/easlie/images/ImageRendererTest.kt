@@ -45,6 +45,52 @@ class ImageRendererTest {
         }
     }
 
+    @Test fun downsizingByZoomOrResizeKeepsTheCurrentImageUntilReplacementIsReady() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File.createTempFile("downsize-test-", ".png", context.cacheDir)
+        Bitmap.createBitmap(2048, 1024, Bitmap.Config.ARGB_8888).let { bitmap ->
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+        val source = ImageSource(file, 2048, 1024, 0, false)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val renderer = ImageRenderer(scope, 16L * 1024 * 1024)
+        val item = BoardItem("image", CanvasPoint(0f, 0f), 1024f, 512f, zIndex = 0)
+        val size = CanvasSize(1200f, 800f)
+        suspend fun awaitWidth(width: Int) = withTimeout(5000) {
+            while (withContext(Dispatchers.Main) { renderer.images[item.id]?.width } != width) delay(10)
+        }
+        try {
+            for (resizeItem in listOf(false, true)) {
+                withContext(Dispatchers.Main) {
+                    renderer.refresh(listOf(item), mapOf(item.id to source), CanvasViewport(), size, 1f)
+                }
+                awaitWidth(1024)
+                withContext(Dispatchers.Main) {
+                    val old = renderer.images.getValue(item.id)
+                    val smaller = if (resizeItem) item.copy(width = 128f, height = 64f) else item
+                    val viewport = if (resizeItem) CanvasViewport() else CanvasViewport(zoom = 0.125f)
+                    renderer.refresh(listOf(smaller), mapOf(item.id to source), viewport, size, 1f)
+                    assertSame("A downsize must not publish a blank image", old, renderer.images[item.id])
+                }
+                awaitWidth(128)
+            }
+            // A failed replacement must keep the last usable image, too.
+            file.delete()
+            withContext(Dispatchers.Main) {
+                val old = renderer.images.getValue(item.id)
+                renderer.refresh(listOf(item.copy(width = 16f, height = 8f)),
+                    mapOf(item.id to source), CanvasViewport(), size, 1f)
+                assertSame(old, renderer.images[item.id])
+            }
+            scope.coroutineContext[Job]!!.children.toList().joinAll()
+            withContext(Dispatchers.Main) { assertEquals(128, renderer.images.getValue(item.id).width) }
+        } finally {
+            withContext(Dispatchers.Main) { renderer.clear(); scope.cancel() }
+            file.delete()
+        }
+    }
+
     @Test fun subsamplingPreservesExifOrientationWithoutKeepingSourcePixels() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = File.createTempFile("oriented-test-", ".png", context.cacheDir)

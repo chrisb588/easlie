@@ -40,8 +40,8 @@ internal class ByteImageCache<K, V>(val budget: Long, private val bytes: (V) -> 
         entries.remove(key)?.let { sizeBytes -= bytes(it) }
     }
     fun put(key: K, value: V) {
-        remove(key)
         if (bytes(value) > budget) return
+        remove(key)
         entries[key] = value
         sizeBytes += bytes(value)
         while (sizeBytes > budget) {

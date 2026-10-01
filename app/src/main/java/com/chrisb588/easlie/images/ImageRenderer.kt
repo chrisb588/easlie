@@ -55,9 +55,10 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
             if (requested[id]?.sample != jobs[id]?.first) jobs.remove(id)?.second?.cancel()
         }
         cache.protectedKeys = visible.map { it.id }.toSet()
-        cache.snapshot().forEach { (id, entry) ->
-            val demand = requested[id]
-            if (demand == null || entry.sample < demand.sample) cache.remove(id)
+        cache.snapshot().keys.forEach { id ->
+            // Keep either resolution until its replacement is ready. Removing a sharper
+            // copy before a downsize finishes makes zooming and resizing flash blank.
+            if (id !in requested) cache.remove(id)
         }
         publish()
         for (demand in demands) {
@@ -80,7 +81,7 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    // Keep the existing preview if a sharper decode fails.
+                    // Keep the existing image if either an upgrade or downsize fails.
                 } finally {
                     decoded?.recycle() // Includes cancellation while returning from the IO dispatcher.
                     if (jobs[demand.id]?.second === currentCoroutineContext().job) jobs.remove(demand.id)
