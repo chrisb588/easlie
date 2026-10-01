@@ -396,7 +396,12 @@ class FloatingBoardService : Service() {
             val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
                 WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
             )
-            bounds.inset(insets.left, insets.top, insets.right, insets.bottom)
+            bounds.set(
+                bounds.left + insets.left,
+                bounds.top + insets.top,
+                bounds.right - insets.right,
+                bounds.bottom - insets.bottom,
+            )
             return bounds
         }
         val bounds = Rect()
