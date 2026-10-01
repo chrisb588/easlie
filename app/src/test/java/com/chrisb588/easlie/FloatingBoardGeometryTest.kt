@@ -5,6 +5,34 @@ import org.junit.Test
 
 class FloatingBoardGeometryTest {
     @Test
+    fun leftResizeKeepsTheRightEdgeFixed() {
+        val resized = FloatingBoardGeometry.resizedFromLeft(
+            100, 360, 260, -50, 40, 280, 200, 500
+        )
+        assertEquals(50, resized.x)
+        assertEquals(410, resized.width)
+        assertEquals(460, resized.x + resized.width)
+        assertEquals(300, resized.height)
+    }
+
+    @Test
+    fun leftResizeStopsAtDisplayEdgeAndMinimumSize() {
+        val expanded = FloatingBoardGeometry.resizedFromLeft(
+            100, 360, 260, -2000, 2000, 280, 200, 500
+        )
+        assertEquals(0, expanded.x)
+        assertEquals(460, expanded.width)
+        assertEquals(500, expanded.height)
+        val shrunk = FloatingBoardGeometry.resizedFromLeft(
+            100, 360, 260, 2000, -2000, 280, 200, 500
+        )
+        assertEquals(180, shrunk.x)
+        assertEquals(280, shrunk.width)
+        assertEquals(460, shrunk.x + shrunk.width)
+        assertEquals(200, shrunk.height)
+    }
+
+    @Test
     fun resizeCannotGrowBeyondSpaceRemainingAtTheAnchor() {
         val resized = FloatingBoardGeometry.resizedDimensions(
             360, 260, 2000, 2000, 280, 200, 420, 310

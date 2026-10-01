@@ -272,8 +272,22 @@ class FloatingBoardService : Service() {
             FrameLayout.LayoutParams(dp(40), dp(40), Gravity.BOTTOM or Gravity.END)
         )
 
+        val leftResizeHandle = TextView(context).apply {
+            text = "↙"
+            textSize = 22f
+            contentDescription = getString(R.string.floating_board_resize_left_label)
+            setTextColor(Color.WHITE)
+            setGravity(Gravity.CENTER)
+            setBackgroundColor(Color.rgb(74, 76, 84))
+        }
+        root.addView(
+            leftResizeHandle,
+            FrameLayout.LayoutParams(dp(40), dp(40), Gravity.BOTTOM or Gravity.LEFT)
+        )
+
         addMoveListener(header)
         addResizeListener(resizeHandle)
+        addResizeListener(leftResizeHandle, fromLeft = true)
         return root
     }
 
@@ -308,7 +322,7 @@ class FloatingBoardService : Service() {
         }
     }
 
-    private fun addResizeListener(handle: View) {
+    private fun addResizeListener(handle: View, fromLeft: Boolean = false) {
         var startRawX = 0f
         var startRawY = 0f
         var initialWidth = 0
@@ -332,20 +346,33 @@ class FloatingBoardService : Service() {
 
                 MotionEvent.ACTION_MOVE -> {
                     val bounds = availableBoardBounds()
-                    val size = FloatingBoardGeometry.resizedDimensions(
-                        initialWidth = initialWidth,
-                        initialHeight = initialHeight,
-                        deltaX = (event.rawX - startRawX).roundToInt(),
-                        deltaY = (event.rawY - startRawY).roundToInt(),
-                        minimumWidth = dp(MIN_WIDTH_DP),
-                        minimumHeight = dp(MIN_HEIGHT_DP),
-                        maximumWidth = (bounds.width() - initialX).coerceAtLeast(1),
-                        maximumHeight = (bounds.height() - initialY).coerceAtLeast(1)
-                    )
-                    params.x = initialX
+                    val deltaX = (event.rawX - startRawX).roundToInt()
+                    val deltaY = (event.rawY - startRawY).roundToInt()
+                    if (fromLeft) {
+                        val resized = FloatingBoardGeometry.resizedFromLeft(
+                            initialX, initialWidth, initialHeight, deltaX, deltaY,
+                            dp(MIN_WIDTH_DP), dp(MIN_HEIGHT_DP),
+                            (bounds.height() - initialY).coerceAtLeast(1)
+                        )
+                        params.x = resized.x
+                        params.width = resized.width
+                        params.height = resized.height
+                    } else {
+                        val size = FloatingBoardGeometry.resizedDimensions(
+                            initialWidth = initialWidth,
+                            initialHeight = initialHeight,
+                            deltaX = deltaX,
+                            deltaY = deltaY,
+                            minimumWidth = dp(MIN_WIDTH_DP),
+                            minimumHeight = dp(MIN_HEIGHT_DP),
+                            maximumWidth = (bounds.width() - initialX).coerceAtLeast(1),
+                            maximumHeight = (bounds.height() - initialY).coerceAtLeast(1)
+                        )
+                        params.x = initialX
+                        params.width = size.width
+                        params.height = size.height
+                    }
                     params.y = initialY
-                    params.width = size.width
-                    params.height = size.height
                     updateBoardLayout()
                     true
                 }

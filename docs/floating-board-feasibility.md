@@ -5,6 +5,12 @@ implementation. The current proof has one overlay window, a placeholder
 board surface, move and resize gestures, and notification actions for return
 and stop.
 
+Both bottom corners have resize handles. The bottom-right handle keeps the
+top-left corner fixed; the bottom-left handle keeps the top-right corner fixed.
+Both respect the minimum size and remaining usable display space. Tablet checks
+on October 1, 2026 verified bottom-left shrinking and expansion to the left
+display boundary without moving the right edge.
+
 ## Platform behavior
 
 The full-screen activity explains why `SYSTEM_ALERT_WINDOW` is needed and
