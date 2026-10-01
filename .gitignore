@@ -3,3 +3,22 @@
 
 # Gitignore for now
 AGENTS.md
+
+# Local dev files
+local.properties
+
+# Gradle local state and root build output
+/.gradle/
+/build/
+
+# Android Studio local state
+.idea/caches/
+.idea/deploymentTargetSelector.xml
+
+# Android build artifacts and native build state
+captures/
+**/.externalNativeBuild/
+**/.cxx/
+*.apk
+*.aab
+*.iml
