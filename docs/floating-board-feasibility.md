@@ -67,9 +67,20 @@ permission is denied, Android can still treat the service as foreground while
 presenting its foreground-service entry only through system task-management
 UI.
 
+Disabling notification permission while a board is running can terminate the
+app process and remove its overlay. The development tablet recorded process
+exit reason `PERMISSION CHANGE` after this action on October 1, 2026. This is
+Android permission revocation behavior, not a board close action. Reopen easlie
+and explicitly start the board again. The prototype does not automatically
+restart after process termination. Android's separate display-over-other-apps
+notice is controlled by the system, not by easlie's notification permission.
+
 ## Validation limits
 
-The automated JVM tests cover the resize math and minimum-size invariant. A
+The automated JVM tests cover resize math, minimum sizes, and maximum sizes
+within the remaining viewport space. Device checks on October 1, 2026 verified
+that expansion stops at the display boundary and that shrinking at the right
+edge keeps the left anchor fixed. A
 real overlay, notification, permission grant, vendor lifecycle policy, and
 Google Play declaration cannot be proven by local JVM tests. Manual validation
 requires a physical or emulator Android device with overlay permission; final

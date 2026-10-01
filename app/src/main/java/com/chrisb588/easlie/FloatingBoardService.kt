@@ -8,8 +8,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -17,8 +19,10 @@ import android.os.ResultReceiver
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
+import android.view.Display
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
@@ -121,7 +125,11 @@ class FloatingBoardService : Service() {
 
         val type = overlayWindowType()
         val contextForWindow = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            createWindowContext(type, null)
+            val displayManager = getSystemService(DisplayManager::class.java)
+            val display = checkNotNull(displayManager.getDisplay(Display.DEFAULT_DISPLAY)) {
+                "The default display is unavailable"
+            }
+            createDisplayContext(display).createWindowContext(type, null)
         } else {
             this
         }
@@ -281,6 +289,7 @@ class FloatingBoardService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     startRawX = event.rawX
                     startRawY = event.rawY
+                    synchronizeBoardPosition()
                     initialX = params.x
                     initialY = params.y
                     true
@@ -304,6 +313,8 @@ class FloatingBoardService : Service() {
         var startRawY = 0f
         var initialWidth = 0
         var initialHeight = 0
+        var initialX = 0
+        var initialY = 0
 
         handle.setOnTouchListener { _, event ->
             val params = layoutParams ?: return@setOnTouchListener false
@@ -311,20 +322,28 @@ class FloatingBoardService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     startRawX = event.rawX
                     startRawY = event.rawY
+                    synchronizeBoardPosition()
+                    initialX = params.x
+                    initialY = params.y
                     initialWidth = params.width
                     initialHeight = params.height
                     true
                 }
 
                 MotionEvent.ACTION_MOVE -> {
+                    val bounds = availableBoardBounds()
                     val size = FloatingBoardGeometry.resizedDimensions(
                         initialWidth = initialWidth,
                         initialHeight = initialHeight,
                         deltaX = (event.rawX - startRawX).roundToInt(),
                         deltaY = (event.rawY - startRawY).roundToInt(),
                         minimumWidth = dp(MIN_WIDTH_DP),
-                        minimumHeight = dp(MIN_HEIGHT_DP)
+                        minimumHeight = dp(MIN_HEIGHT_DP),
+                        maximumWidth = (bounds.width() - initialX).coerceAtLeast(1),
+                        maximumHeight = (bounds.height() - initialY).coerceAtLeast(1)
                     )
+                    params.x = initialX
+                    params.y = initialY
                     params.width = size.width
                     params.height = size.height
                     updateBoardLayout()
@@ -337,10 +356,47 @@ class FloatingBoardService : Service() {
         }
     }
 
+    private fun availableBoardBounds(): Rect {
+        val manager = windowManager ?: return Rect(0, 0, 1, 1)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val metrics = manager.maximumWindowMetrics
+            val bounds = Rect(metrics.bounds)
+            val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+            )
+            bounds.inset(insets.left, insets.top, insets.right, insets.bottom)
+            return bounds
+        }
+        val bounds = Rect()
+        boardView?.getWindowVisibleDisplayFrame(bounds)
+        if (bounds.isEmpty) {
+            @Suppress("DEPRECATION")
+            manager.defaultDisplay.getRectSize(bounds)
+        }
+        return bounds
+    }
+
+    // Android may have fitted a requested position to the display. Start each
+    // gesture from the position actually shown, not the old requested offset.
+    private fun synchronizeBoardPosition() {
+        val view = boardView ?: return
+        val params = layoutParams ?: return
+        val bounds = availableBoardBounds()
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        params.x = location[0] - bounds.left
+        params.y = location[1] - bounds.top
+    }
+
     private fun updateBoardLayout() {
         val view = boardView ?: return
         val params = layoutParams ?: return
         val manager = windowManager ?: return
+        val bounds = availableBoardBounds()
+        params.width = params.width.coerceIn(1, bounds.width().coerceAtLeast(1))
+        params.height = params.height.coerceIn(1, bounds.height().coerceAtLeast(1))
+        params.x = params.x.coerceIn(0, (bounds.width() - params.width).coerceAtLeast(0))
+        params.y = params.y.coerceIn(0, (bounds.height() - params.height).coerceAtLeast(0))
         try {
             manager.updateViewLayout(view, params)
         } catch (exception: IllegalArgumentException) {

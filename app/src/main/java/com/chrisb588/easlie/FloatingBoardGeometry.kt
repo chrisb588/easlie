@@ -8,11 +8,13 @@ internal object FloatingBoardGeometry {
         deltaX: Int,
         deltaY: Int,
         minimumWidth: Int,
-        minimumHeight: Int
+        minimumHeight: Int,
+        maximumWidth: Int = Int.MAX_VALUE,
+        maximumHeight: Int = Int.MAX_VALUE
     ): ResizedDimensions {
         return ResizedDimensions(
-            width = (initialWidth + deltaX).coerceAtLeast(minimumWidth),
-            height = (initialHeight + deltaY).coerceAtLeast(minimumHeight)
+            width = (initialWidth + deltaX).coerceIn(minimumWidth.coerceAtMost(maximumWidth), maximumWidth),
+            height = (initialHeight + deltaY).coerceIn(minimumHeight.coerceAtMost(maximumHeight), maximumHeight)
         )
     }
 }

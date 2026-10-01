@@ -5,6 +5,24 @@ import org.junit.Test
 
 class FloatingBoardGeometryTest {
     @Test
+    fun resizeCannotGrowBeyondSpaceRemainingAtTheAnchor() {
+        val resized = FloatingBoardGeometry.resizedDimensions(
+            360, 260, 2000, 2000, 280, 200, 420, 310
+        )
+        assertEquals(420, resized.width)
+        assertEquals(310, resized.height)
+    }
+
+    @Test
+    fun viewportSmallerThanMinimumStillContainsTheBoard() {
+        val resized = FloatingBoardGeometry.resizedDimensions(
+            360, 260, -2000, -2000, 280, 200, 240, 160
+        )
+        assertEquals(240, resized.width)
+        assertEquals(160, resized.height)
+    }
+
+    @Test
     fun resizeGrowsByThePointerDelta() {
         val resized = FloatingBoardGeometry.resizedDimensions(
             initialWidth = 360,
