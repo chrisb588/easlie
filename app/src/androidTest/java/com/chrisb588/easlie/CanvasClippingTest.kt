@@ -29,7 +29,7 @@ class CanvasClippingTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val fixture = Uri.parse("content://com.chrisb588.easlie.test.images/clipping.png")
         instrumentation.targetContext.contentResolver.call(fixture, "create-clipping-fixture", null, null)
-        val board = BoardStore(instrumentation.targetContext.cacheDir)
+        val board = BoardStore()
         try {
             rule.setContent {
                 Column(Modifier.size(300.dp).background(Color.Blue).testTag("clipping-root")) {

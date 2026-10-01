@@ -6,7 +6,7 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 
-/** Session-only geometry. The center and dimensions are in world coordinates. */
+/** Persistent image geometry. The center and dimensions are in world coordinates. */
 data class BoardItem(
     val id: String,
     val center: CanvasPoint,
@@ -14,6 +14,7 @@ data class BoardItem(
     val height: Float,
     val rotationDegrees: Float = 0f,
     val zIndex: Int,
+    val assetId: String = id,
 ) {
     fun localToWorld(point: CanvasPoint) = center + point.rotatedBy(rotationDegrees)
 

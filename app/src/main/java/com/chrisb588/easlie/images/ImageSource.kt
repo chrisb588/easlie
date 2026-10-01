@@ -57,21 +57,26 @@ internal suspend fun copyImageSource(resolver: ContentResolver, uri: Uri, direct
                 }
             }
         } ?: error("Unreadable image")
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.path, bounds)
-        require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outMimeType in supportedMimeTypes)
-        file.inputStream().use { requireStillImage(it, bounds.outMimeType) }
-        val exif = ExifInterface(file)
-        val swapped = exif.rotationDegrees % 180 != 0
-        val source = ImageSource(file, if (swapped) bounds.outHeight else bounds.outWidth,
-            if (swapped) bounds.outWidth else bounds.outHeight, exif.rotationDegrees, exif.isFlipped)
-        // Metadata alone can survive truncated pixel data. Validate a tiny decode before accepting.
-        var sample = 1
-        while (source.edge / sample > 128) sample *= 2
-        source.decode(sample).recycle()
-        return source
+        return readImageSource(file)
     } catch (failure: Exception) {
         file.delete()
         throw failure
     }
+}
+
+/** Read full oriented dimensions while validating only a small bitmap. Called on IO. */
+internal suspend fun readImageSource(file: File): ImageSource {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outMimeType in supportedMimeTypes)
+    file.inputStream().use { requireStillImage(it, bounds.outMimeType) }
+    val exif = ExifInterface(file)
+    val swapped = exif.rotationDegrees % 180 != 0
+    val source = ImageSource(file, if (swapped) bounds.outHeight else bounds.outWidth,
+        if (swapped) bounds.outWidth else bounds.outHeight, exif.rotationDegrees, exif.isFlipped)
+    // Metadata alone can survive truncated pixel data. Validate a tiny decode before accepting.
+    var sample = 1
+    while (source.edge / sample > 128) sample *= 2
+    source.decode(sample).recycle()
+    return source
 }

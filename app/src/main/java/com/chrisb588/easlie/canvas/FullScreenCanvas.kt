@@ -63,7 +63,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
             board.refreshImages(density)
         }
     }
-    DisposableEffect(board) { onDispose { board.releaseImages() } }
+    DisposableEffect(board) { onDispose { board.save(); board.releaseImages() } }
     val handleRadius = with(LocalDensity.current) { 12.dp.toPx() }
     val rotationGap = with(LocalDensity.current) { 36.dp.toPx() }
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -81,110 +81,112 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
                     var lastTapPosition = Offset.Zero
                     awaitEachGesture {
                         val down = awaitFirstDown()
-                        menuId = null
-                        val start = down.position.toCanvasPoint()
-                        val viewportAtStart = board.viewport
-                        val size = board.windowSize
-                        val worldStart = viewportAtStart.windowToWorld(start, size)
-                        val selected = board.items.firstOrNull { it.id == selectedId }
-                        val hit = board.items.hitTest(worldStart)
-                        val handlesBelongToHit = hit == null || hit.id == selectedId
-                        val centerDistance = selected?.let {
-                            (viewportAtStart.worldToWindow(it.center, size).toOffset() - down.position).getDistance()
-                        } ?: 0f
-                        // Preserve a move target near the center even when a zoomed-out image is tiny.
-                        val handle = selected?.takeIf { handlesBelongToHit }?.let { item ->
-                            val nearest = corners.minByOrNull {
-                                val point = viewportAtStart.worldToWindow(item.corner(it.xSign, it.ySign), size)
-                                (point.toOffset() - down.position).getDistance()
+                        try {
+                            menuId = null
+                            val start = down.position.toCanvasPoint()
+                            val viewportAtStart = board.viewport
+                            val size = board.windowSize
+                            val worldStart = viewportAtStart.windowToWorld(start, size)
+                            val selected = board.items.firstOrNull { it.id == selectedId }
+                            val hit = board.items.hitTest(worldStart)
+                            val handlesBelongToHit = hit == null || hit.id == selectedId
+                            val centerDistance = selected?.let {
+                                (viewportAtStart.worldToWindow(it.center, size).toOffset() - down.position).getDistance()
+                            } ?: 0f
+                            // Preserve a move target near the center even when a zoomed-out image is tiny.
+                            val handle = selected?.takeIf { handlesBelongToHit }?.let { item ->
+                                val nearest = corners.minByOrNull {
+                                    val point = viewportAtStart.worldToWindow(item.corner(it.xSign, it.ySign), size)
+                                    (point.toOffset() - down.position).getDistance()
+                                }
+                                nearest?.takeIf {
+                                    val point = viewportAtStart.worldToWindow(item.corner(it.xSign, it.ySign), size)
+                                    val distance = (point.toOffset() - down.position).getDistance()
+                                    distance <= handleRadius * 2f && distance < centerDistance
+                                }
                             }
-                            nearest?.takeIf {
-                                val point = viewportAtStart.worldToWindow(item.corner(it.xSign, it.ySign), size)
+                            val rotationHit = selected?.takeIf { handlesBelongToHit }?.let {
+                                val point = viewportAtStart.worldToWindow(rotationHandle(it, rotationGap / viewportAtStart.zoom), size)
                                 val distance = (point.toOffset() - down.position).getDistance()
                                 distance <= handleRadius * 2f && distance < centerDistance
+                            } == true
+                            val kind = when {
+                                handle != null -> DragKind.Resize
+                                rotationHit -> DragKind.Rotate
+                                hit == null -> DragKind.Pan
+                                hit.id == selectedId -> DragKind.Move
+                                else -> DragKind.Blocked
                             }
-                        }
-                        val rotationHit = selected?.takeIf { handlesBelongToHit }?.let {
-                            val point = viewportAtStart.worldToWindow(rotationHandle(it, rotationGap / viewportAtStart.zoom), size)
-                            val distance = (point.toOffset() - down.position).getDistance()
-                            distance <= handleRadius * 2f && distance < centerDistance
-                        } == true
-                        val kind = when {
-                            handle != null -> DragKind.Resize
-                            rotationHit -> DragKind.Rotate
-                            hit == null -> DragKind.Pan
-                            hit.id == selectedId -> DragKind.Move
-                            else -> DragKind.Blocked
-                        }
-                        val initialItem = if (kind == DragKind.Resize || kind == DragKind.Rotate) selected else hit
-                        var dragged = false
-                        var viewportGesture = false
-                        var totalDelta = Offset.Zero
-                        var lastPosition = down.position
-                        var upTime = down.uptimeMillis
-                        do {
-                            val event = awaitPointerEvent()
-                            val pressed = event.changes.count { it.pressed }
-                            if (pressed >= 2) {
-                                viewportGesture = true
-                                dragged = true
-                                lastTapId = null
-                                val focal = event.calculateCentroid(useCurrent = false)
-                                if (focal != Offset.Unspecified) {
-                                    board.viewport = board.viewport.transformedBy(
-                                        focal.toCanvasPoint(), event.calculatePan().toCanvasPoint(),
-                                        event.calculateZoom(), board.windowSize,
-                                    )
-                                }
-                                event.changes.forEach { if (it.pressed) it.consume() }
-                            } else if (pressed == 1 && !viewportGesture) {
-                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                val delta = change.positionChange()
-                                totalDelta += delta
-                                if (!dragged && totalDelta.getDistance() > viewConfiguration.touchSlop) {
+                            val initialItem = if (kind == DragKind.Resize || kind == DragKind.Rotate) selected else hit
+                            var dragged = false
+                            var viewportGesture = false
+                            var totalDelta = Offset.Zero
+                            var lastPosition = down.position
+                            var upTime = down.uptimeMillis
+                            do {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.count { it.pressed }
+                                if (pressed >= 2) {
+                                    viewportGesture = true
                                     dragged = true
                                     lastTapId = null
-                                }
-                                if (dragged) {
-                                    when (kind) {
-                                        DragKind.Pan -> board.viewport = viewportAtStart.pannedBy(totalDelta.toCanvasPoint())
-                                        DragKind.Move -> initialItem?.let {
-                                            board.update(it.copy(center = it.center + totalDelta.toCanvasPoint() / viewportAtStart.zoom))
-                                        }
-                                        DragKind.Resize -> if (initialItem != null && handle != null) {
-                                            board.update(initialItem.resizedAtCorner(handle.xSign, handle.ySign,
-                                                totalDelta.toCanvasPoint() / viewportAtStart.zoom))
-                                        }
-                                        DragKind.Rotate -> initialItem?.let {
-                                            board.update(it.rotatedFrom(worldStart,
-                                                viewportAtStart.windowToWorld(change.position.toCanvasPoint(), size)))
-                                        }
-                                        DragKind.Blocked -> Unit
+                                    val focal = event.calculateCentroid(useCurrent = false)
+                                    if (focal != Offset.Unspecified) {
+                                        board.transformViewport(
+                                            focal.toCanvasPoint(), event.calculatePan().toCanvasPoint(),
+                                            event.calculateZoom(), board.windowSize,
+                                        )
                                     }
-                                    change.consume()
+                                    event.changes.forEach { if (it.pressed) it.consume() }
+                                } else if (pressed == 1 && !viewportGesture) {
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    val delta = change.positionChange()
+                                    totalDelta += delta
+                                    if (!dragged && totalDelta.getDistance() > viewConfiguration.touchSlop) {
+                                        dragged = true
+                                        lastTapId = null
+                                    }
+                                    if (dragged) {
+                                        when (kind) {
+                                            DragKind.Pan -> board.viewport = viewportAtStart.pannedBy(totalDelta.toCanvasPoint())
+                                            DragKind.Move -> initialItem?.let {
+                                                board.update(it.copy(center = it.center + totalDelta.toCanvasPoint() / viewportAtStart.zoom))
+                                            }
+                                            DragKind.Resize -> if (initialItem != null && handle != null) {
+                                                board.update(initialItem.resizedAtCorner(handle.xSign, handle.ySign,
+                                                    totalDelta.toCanvasPoint() / viewportAtStart.zoom))
+                                            }
+                                            DragKind.Rotate -> initialItem?.let {
+                                                board.update(it.rotatedFrom(worldStart,
+                                                    viewportAtStart.windowToWorld(change.position.toCanvasPoint(), size)))
+                                            }
+                                            DragKind.Blocked -> Unit
+                                        }
+                                        change.consume()
+                                    }
+                                    lastPosition = change.position
                                 }
-                                lastPosition = change.position
+                                val up = event.changes.firstOrNull { it.id == down.id }
+                                if (up != null) upTime = up.uptimeMillis
+                            } while (event.changes.any { it.pressed })
+                            // A handle affects drags only. Stationary taps always select the top image.
+                            if (!dragged && !viewportGesture && (hit != null || (handle == null && !rotationHit))) {
+                                selectedId = hit?.id
+                                val elapsed = upTime - lastTapTime
+                                if (hit != null && hit.id == lastTapId &&
+                                    elapsed in viewConfiguration.doubleTapMinTimeMillis..viewConfiguration.doubleTapTimeoutMillis &&
+                                    (lastPosition - lastTapPosition).getDistance() <= viewConfiguration.touchSlop * 2f
+                                ) {
+                                    menuId = hit.id
+                                    menuPosition = lastPosition
+                                    lastTapId = null
+                                } else {
+                                    lastTapId = hit?.id
+                                    lastTapTime = upTime
+                                    lastTapPosition = lastPosition
+                                }
                             }
-                            val up = event.changes.firstOrNull { it.id == down.id }
-                            if (up != null) upTime = up.uptimeMillis
-                        } while (event.changes.any { it.pressed })
-                        // A handle affects drags only. Stationary taps always select the top image.
-                        if (!dragged && !viewportGesture && (hit != null || (handle == null && !rotationHit))) {
-                            selectedId = hit?.id
-                            val elapsed = upTime - lastTapTime
-                            if (hit != null && hit.id == lastTapId &&
-                                elapsed in viewConfiguration.doubleTapMinTimeMillis..viewConfiguration.doubleTapTimeoutMillis &&
-                                (lastPosition - lastTapPosition).getDistance() <= viewConfiguration.touchSlop * 2f
-                            ) {
-                                menuId = hit.id
-                                menuPosition = lastPosition
-                                lastTapId = null
-                            } else {
-                                lastTapId = hit?.id
-                                lastTapTime = upTime
-                                lastTapPosition = lastPosition
-                            }
-                        }
+                        } finally { board.save() }
                     }
                 },
         ) {
