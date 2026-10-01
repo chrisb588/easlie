@@ -16,10 +16,10 @@ class FullScreenCanvasTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun fullScreenBoardAndTestMarkerAreRendered() {
+    fun fullScreenBoardIsRendered() {
         composeRule
             .onNodeWithTag(CanvasTestTags.FullScreenBoard)
             .assertIsDisplayed()
-            .assertContentDescriptionContains("fixed test marker")
+            .assertContentDescriptionContains("Reference image board")
     }
 }
