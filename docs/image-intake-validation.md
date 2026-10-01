@@ -18,9 +18,24 @@ Android tests cover URI share payloads, image subsampling and EXIF orientation, 
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:compileDebugAndroidTestKotlin
 ```
 
+## Sharing task regression
+
+Image shares reuse the existing easlie activity and task. The launcher activity uses `singleTask` and `documentLaunchMode="never"` so browser/gallery document flags do not create extra Recents entries.
+
+`ShareTaskTest` sends images from a separate test-app activity using the flags observed in real browser shares. It checks single-image and multiple-image delivery, one unchanged task ID, reuse of the original activity, preservation of the existing item, and launcher return without replaying imports.
+
+On the Samsung SM-X616B running Android 16, this regression failed against the old `singleTop` build because sharing created multiple tasks. It passed against the fixed build. All 21 host unit tests also passed. The unrelated lint error described below remains.
+
+```bash
+adb shell am instrument -w -e class com.chrisb588.easlie.ShareTaskTest \
+  com.chrisb588.easlie.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+The test removes prior easlie tasks and uses generated fixture images. Run it on a disposable in-memory session.
+
 ## Device validation still required
 
-After rebasing onto `main` containing PR #13, the debug APK was built, installed, and launched on a Samsung SM-X616B running Android 16. The activity remained foregrounded and the crash log was empty. All 21 host unit tests passed, and instrumentation sources compiled. The instrumentation suite was not executed.
+After rebasing onto `main` containing PR #13, the debug APK was built, installed, and launched on a Samsung SM-X616B running Android 16. The activity remained foregrounded and the crash log was empty. All 21 host unit tests passed, and instrumentation sources compiled. The focused task-reuse instrumentation test passed. The remaining intake and gesture tests have not been executed.
 
 Lint reports an inherited API-level error in `FloatingBoardService.kt`: the four-argument `Rect.inset` overload requires API 31, but its path is guarded for API 30. This error also exists in the updated `main` and is outside issue #4.
 

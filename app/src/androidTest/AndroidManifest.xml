@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <activity
+            android:name="com.chrisb588.easlie.ShareSenderActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
         <provider
             android:name="com.chrisb588.easlie.images.IntakeTestProvider"
             android:authorities="com.chrisb588.easlie.test.images"
