@@ -102,6 +102,11 @@ class MainActivity : ComponentActivity() {
         board.enqueueImport(contentResolver, sharedImageUris(intent))
     }
 
+    override fun onStop() {
+        board.save()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         refreshOverlayPermission()

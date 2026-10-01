@@ -9,7 +9,7 @@ import android.net.Uri
 import androidx.core.content.IntentCompat
 import androidx.exifinterface.media.ExifInterface
 
-private val supportedMimeTypes = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/avif", "image/bmp")
+internal val supportedMimeTypes = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/avif", "image/bmp")
 
 /** Only URI payloads from image share actions are accepted; text and arbitrary actions are ignored. */
 fun sharedImageUris(intent: Intent): List<Uri> {
@@ -31,21 +31,27 @@ fun loadImage(resolver: ContentResolver, uri: Uri): Bitmap {
     require(uri.scheme == ContentResolver.SCHEME_CONTENT) { "Unsupported image source" }
     val declaredType = resolver.getType(uri)
     require(declaredType == null || declaredType in supportedMimeTypes) { "Unsupported image type" }
+    return loadImage { resolver.openInputStream(uri) ?: error("Unreadable image") }
+}
+
+fun loadImage(file: java.io.File): Bitmap = loadImage { file.inputStream() }
+
+private fun loadImage(open: () -> java.io.InputStream): Bitmap {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    val metadataStream = resolver.openInputStream(uri) ?: error("Unreadable image")
+    val metadataStream = open()
     metadataStream.use { BitmapFactory.decodeStream(it, null, bounds) }
     require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outMimeType in supportedMimeTypes) {
         "Unsupported or unreadable image"
     }
-    val containerStream = resolver.openInputStream(uri) ?: error("Unreadable image")
+    val containerStream = open()
     containerStream.use { requireStillImage(it, bounds.outMimeType) }
     var sample = 1
     while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1024) sample *= 2
     val options = BitmapFactory.Options().apply { inSampleSize = sample }
-    val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+    val bitmap = open().use { BitmapFactory.decodeStream(it, null, options) }
         ?: error("Unreadable image")
     try {
-        val exif = resolver.openInputStream(uri)?.use { ExifInterface(it) } ?: error("Unreadable image")
+        val exif = open().use { ExifInterface(it) }
         val matrix = Matrix().apply {
             if (exif.isFlipped) postScale(-1f, 1f)
             postRotate(exif.rotationDegrees.toFloat())
