@@ -13,7 +13,8 @@ class BoardStorageTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().context
 
     private fun withStorage(test: (BoardStorage, File) -> Unit) {
-        val directory = File(context.cacheDir, "storage-test-${java.util.UUID.randomUUID()}")
+        val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
+            "storage-test-${java.util.UUID.randomUUID()}")
         try { test(BoardStorage(directory), directory) }
         finally { directory.deleteRecursively() }
     }
@@ -34,6 +35,41 @@ class BoardStorageTest {
         try { storage.save(BoardSnapshot(fullScreen = CanvasViewport(zoom = 2f))); fail("Expected failure") }
         catch (_: java.io.IOException) { }
         assertArrayEquals(original, File(directory, "board.json").readBytes())
+        assertFalse(File(directory, "board.json.tmp").exists())
+    }
+
+    @Test fun concurrentReaderOnlySeesCompleteManifestsDuringReplacement() = withStorage { storage, directory ->
+        val first = BoardSnapshot(fullScreen = CanvasViewport(zoom = 1f))
+        val second = BoardSnapshot(fullScreen = CanvasViewport(zoom = 2f))
+        storage.save(first)
+        val firstBytes = File(directory, "board.json").readText()
+        storage.save(second)
+        val secondBytes = File(directory, "board.json").readText()
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+        val failure = java.util.concurrent.atomic.AtomicReference<Throwable?>()
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val started = java.util.concurrent.CountDownLatch(1)
+        val reader = Thread {
+            try {
+                do {
+                    val content = File(directory, "board.json").readText()
+                    assertTrue(content == firstBytes || content == secondBytes)
+                    reads.incrementAndGet()
+                    started.countDown()
+                } while (!finished.get())
+            } catch (error: Throwable) { failure.set(error); started.countDown() }
+        }
+        reader.start()
+        try {
+            assertTrue(started.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            repeat(100) { storage.save(if (it % 2 == 0) first else second) }
+        } finally {
+            finished.set(true)
+            reader.join(5000)
+        }
+        assertFalse(reader.isAlive)
+        failure.get()?.let { throw it }
+        assertTrue(reads.get() > 1)
         assertFalse(File(directory, "board.json.tmp").exists())
     }
 
