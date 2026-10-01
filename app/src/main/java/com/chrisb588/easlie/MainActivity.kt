@@ -12,16 +12,20 @@ import android.provider.Settings
 import android.Manifest
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,10 +35,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.chrisb588.easlie.images.sharedImageUris
 import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.EaslieTheme
 
 class MainActivity : ComponentActivity() {
+    private val board get() = (application as EaslieApplication).board
     private var overlayPermissionGranted by mutableStateOf(false)
     private var errorMessage by mutableStateOf<String?>(null)
     private val floatingBoardResultReceiver = object : ResultReceiver(
@@ -65,10 +71,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         refreshOverlayPermission()
+        if (savedInstanceState == null) receiveImages(intent)
         setContent {
             EaslieTheme {
+                val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+                    board.enqueueImport(contentResolver, uris)
+                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     FloatingBoardScreen(
+                        board = board,
+                        onAddImages = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         overlayPermissionGranted = overlayPermissionGranted,
                         errorMessage = errorMessage,
                         onOpenOverlaySettings = ::openOverlaySettings,
@@ -78,6 +90,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        receiveImages(intent)
+    }
+
+    private fun receiveImages(intent: Intent) {
+        board.enqueueImport(contentResolver, sharedImageUris(intent))
     }
 
     override fun onResume() {
@@ -140,6 +162,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun FloatingBoardScreen(
+    board: BoardStore,
+    onAddImages: () -> Unit,
     overlayPermissionGranted: Boolean,
     errorMessage: String?,
     onOpenOverlaySettings: () -> Unit,
@@ -178,7 +202,16 @@ private fun FloatingBoardScreen(
             )
         }
 
-        FullScreenCanvas(modifier = Modifier.weight(1f))
+        Button(onClick = onAddImages) {
+            Text(if (board.importing) "Importing… Add images" else "Add images")
+        }
+        board.message?.let { message ->
+            Row {
+                Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = { board.message = null }) { Text("Dismiss") }
+            }
+        }
+        FullScreenCanvas(board = board, modifier = Modifier.weight(1f))
     }
 }
 
@@ -187,6 +220,8 @@ private fun FloatingBoardScreen(
 private fun FloatingBoardScreenPreview() {
     EaslieTheme {
         FloatingBoardScreen(
+            board = BoardStore(),
+            onAddImages = {},
             overlayPermissionGranted = false,
             errorMessage = null,
             onOpenOverlaySettings = {},
