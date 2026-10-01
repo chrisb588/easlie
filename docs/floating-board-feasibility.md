@@ -43,13 +43,39 @@ declaration flow; it is not a guarantee of Play approval.
 ## Development tablet and vendor follow-up
 
 Connected-device tooling identified the development tablet as a Samsung
-SM-X616B running Android 16. During automated verification, the tablet was
-locked and in Dozing. Samsung vendor lifecycle behavior, overlay visibility,
-and notification presentation therefore remain unverified; no observed
-behavior is being attributed to Samsung or One UI.
+SM-X616B running Android 16 and One UI 8.5 (One UI version reported by the lead).
+The lead reported these manual observations on
+October 1, 2026; they have not been independently reproduced by automation:
 
-After unlocking the tablet and recording its One UI version, perform these
-manual checks and record the exact settings labels shown by the device:
+- The board remained visible and interactive over another app and after
+  locking and unlocking the tablet.
+- The board disappeared while Settings was open and reappeared upon leaving
+  Settings without restarting it. Android allows sensitive windows
+  to suppress application overlays; the device's exact cause is unverified.
+- easlie was absent from sleeping and deep-sleeping app lists. Its battery
+  setting was Optimized, with 0% reported usage since the last full charge.
+  During the screen-off check from 21:24 to 21:45 (21 minutes), the board
+  remained visible, movable, and resizable after waking the tablet. This does
+  not establish prolonged idle or forced-Doze behavior.
+- With notification permission allowed, one easlie notification and a separate
+  Android system overlay notice appeared. With permission disabled, only the
+  system notice appeared. After closing and reopening, the board still worked
+  with notification permission disabled.
+- Move, resize, return, stop, and repeated start/stop checks were reported as
+  completed during smoke testing. The two notices above are from different
+  publishers, rather than two easlie notifications.
+- Swiping easlie's card away from Recents left the board active, movable, and
+  resizable. Return to easlie opened the activity again. The lead also reported
+  that stopping removed the board.
+- After restarting the tablet, no board appeared automatically. Opening easlie
+  and tapping Start floating board created exactly one board.
+
+The location of Samsung's foreground-service task-management control remains
+unidentified by the lead. The lifecycle results above document the tested
+configuration; they do not establish behavior under every vendor power policy.
+
+The following procedure defines the manual checks reported above and can be
+used to repeat them. Record the exact settings labels shown by the device:
 
 1. Grant overlay permission through Settings > Apps > easlie > Appear on top
    (or the equivalent Special access entry). Start the board, switch to
@@ -64,7 +90,8 @@ manual checks and record the exact settings labels shown by the device:
    where Samsung exposes the foreground-service status, if anywhere.
 4. Use the overlay move, resize, return, and stop controls. Confirm that
    return and stop remove both the window and notification. Start and stop
-   repeatedly and confirm that only one window and one notification exist.
+   repeatedly and confirm that only one window and one easlie notification
+   exist. Android's separate overlay notice is not a duplicate app notification.
 5. Swipe easlie away from Recents and restart the tablet. Confirm that the
    `START_NOT_STICKY` service does not recreate the board without an explicit
    user start, then test an explicit start again.
@@ -78,6 +105,11 @@ notification drawer presentation is part of the validation. If notification
 permission is denied, Android can still treat the service as foreground while
 presenting its foreground-service entry only through system task-management
 UI.
+
+The foreground-service notification supplied by easlie is required by Android
+when calling `startForeground`, even if notification permission is denied.
+Android's separate overlay notice cannot replace that app-supplied notification.
+See https://developer.android.com/develop/ui/compose/notifications/notification-permission.
 
 Disabling notification permission while a board is running can terminate the
 app process and remove its overlay. The development tablet recorded process
@@ -95,6 +127,10 @@ that expansion stops at the display boundary and that shrinking at the right
 edge keeps the left anchor fixed. A
 real overlay, notification, permission grant, vendor lifecycle policy, and
 Google Play declaration cannot be proven by local JVM tests. Manual validation
-requires a physical or emulator Android device with overlay permission; final
-confidence for this issue still requires manual testing on the Samsung
-SM-X616B after it is unlocked and no longer Dozing.
+requires a physical or emulator Android device with overlay permission. The
+lead's Samsung SM-X616B results are recorded above; the location of the vendor's
+active-apps control was not identified and was deferred by the lead.
+
+Sampled window coordinates do not prove that rendered edges remain stationary.
+The visible bottom-left resize drift remains a known defect, deferred to
+issue #14: https://github.com/chrisb588/easlie/issues/14.
