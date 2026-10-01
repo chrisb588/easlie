@@ -142,7 +142,7 @@ class FloatingBoardService : Service() {
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or Gravity.LEFT
             x = dp(DEFAULT_X_DP)
             y = dp(DEFAULT_Y_DP)
         }
@@ -269,7 +269,7 @@ class FloatingBoardService : Service() {
         }
         root.addView(
             resizeHandle,
-            FrameLayout.LayoutParams(dp(40), dp(40), Gravity.BOTTOM or Gravity.END)
+            FrameLayout.LayoutParams(dp(40), dp(40), Gravity.BOTTOM or Gravity.RIGHT)
         )
 
         val leftResizeHandle = TextView(context).apply {
@@ -354,10 +354,15 @@ class FloatingBoardService : Service() {
                             dp(MIN_WIDTH_DP), dp(MIN_HEIGHT_DP),
                             (bounds.height() - initialY).coerceAtLeast(1)
                         )
-                        params.x = resized.x
+                        // Anchor the window itself to the fixed right edge. Updating
+                        // a left offset and width together can visibly drift while
+                        // Android resizes the window surface asynchronously.
+                        params.gravity = Gravity.TOP or Gravity.RIGHT
+                        params.x = bounds.width() - (initialX + initialWidth)
                         params.width = resized.width
                         params.height = resized.height
                     } else {
+                        params.gravity = Gravity.TOP or Gravity.LEFT
                         val size = FloatingBoardGeometry.resizedDimensions(
                             initialWidth = initialWidth,
                             initialHeight = initialHeight,
@@ -411,6 +416,7 @@ class FloatingBoardService : Service() {
         val bounds = availableBoardBounds()
         val location = IntArray(2)
         view.getLocationOnScreen(location)
+        params.gravity = Gravity.TOP or Gravity.LEFT
         params.x = location[0] - bounds.left
         params.y = location[1] - bounds.top
     }

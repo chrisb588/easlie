@@ -11,6 +11,12 @@ Both respect the minimum size and remaining usable display space. Tablet checks
 on October 1, 2026 verified bottom-left shrinking and expansion to the left
 display boundary without moving the right edge.
 
+Bottom-left resizing uses native right gravity with a fixed right offset so
+Android anchors the window while resizing its surface. Four repeated tablet
+resize gestures kept the right edge at the display boundary in all 90 sampled
+window frames. Moving and bottom-right resizing restore left gravity using the
+window's actual on-screen position.
+
 ## Platform behavior
 
 The full-screen activity explains why `SYSTEM_ALERT_WINDOW` is needed and
