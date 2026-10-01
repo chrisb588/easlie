@@ -90,4 +90,60 @@ class BoardStorePersistenceTest {
             assertEquals(-250f, BoardStorage(directory).load().snapshot.fullScreen.center.x)
         } finally { directory.deleteRecursively() }
     }
+    @Test fun futureManifestDisablesEditsImportsAndCleanup() {
+        val directory = File(context.cacheDir, "future-board-${UUID.randomUUID()}").apply { mkdirs() }
+        val manifest = File(directory, "board.json").apply { writeText("{\"schemaVersion\":99}") }
+        val orphan = BoardStorage(directory).asset("future-asset").apply { parentFile!!.mkdirs(); writeText("future data") }
+        val temporary = File(directory, "board.json.tmp").apply { writeText("future temporary data") }
+        val before = manifest.readBytes()
+        lateinit var store: BoardStore
+        try {
+            onMain { store = BoardStore(directory) }
+            await { store.message?.contains("read-only") == true }
+            onMain {
+                store.setViewport(CanvasViewport(zoom = 2f), false)
+                store.resizeWindow(CanvasSize(600f, 400f))
+                store.enqueueImport(context.contentResolver, listOf(Uri.parse("content://com.chrisb588.easlie.test.images/unused.png")))
+                store.delete("future-item")
+                store.save()
+            }
+            Thread.sleep(1200)
+            assertArrayEquals(before, manifest.readBytes())
+            assertTrue(orphan.isFile)
+            assertTrue(temporary.isFile)
+            onMain { assertEquals(CanvasViewport(), store.viewport); assertFalse(store.importing) }
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test fun freshStoreRestoresContentBothViewportsAndReportsUnreadableImages() {
+        val directory = File(context.cacheDir, "restored-board-${UUID.randomUUID()}")
+        val storage = BoardStorage(directory)
+        val bitmap = Bitmap.createBitmap(30, 20, Bitmap.Config.ARGB_8888)
+        storage.asset("good").apply {
+            parentFile!!.mkdirs()
+            outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        bitmap.recycle()
+        storage.asset("broken").writeText("not an image")
+        val full = CanvasViewport(CanvasPoint(13f, -8f), 2f)
+        val floating = CanvasViewport(CanvasPoint(-4f, 7f), .5f)
+        val good = BoardItem("good-item", CanvasPoint(1f, 2f), 30f, 20f, 45f, 10, "good")
+        storage.save(BoardSnapshot(listOf(good,
+            BoardItem("broken-item", CanvasPoint(0f, 0f), 10f, 10f, zIndex = 10, assetId = "broken")), full, floating))
+        lateinit var store: BoardStore
+        try {
+            onMain { store = BoardStore(directory) }
+            await { store.items.size == 1 && store.message != null }
+            onMain {
+                assertEquals(listOf(good), store.items)
+                assertTrue(store.images.containsKey(good.id))
+                assertEquals(full, store.viewportFor(false))
+                assertEquals(floating, store.viewportFor(true))
+                assertTrue(store.message!!.contains("1 unreadable image(s)"))
+            }
+            // Until a successful replacement save, the original manifest still owns this file.
+            assertTrue(storage.asset("broken").exists())
+        } finally { directory.deleteRecursively() }
+    }
+
 }

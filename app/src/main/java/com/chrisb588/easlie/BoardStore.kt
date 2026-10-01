@@ -68,7 +68,7 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     if (restored != null) {
                         fullScreen = restored.snapshot.fullScreen
                         floating = restored.snapshot.floating
-                        var skipped = restored.skipped
+                        var unreadable = 0
                         val restoredItems = mutableListOf<BoardItem>()
                         for (item in restored.snapshot.items) {
                             try {
@@ -76,14 +76,17 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                                 sources[item.id] = source
                                 restoredItems.add(item)
                             } catch (failure: Exception) {
-                                skipped++
+                                unreadable++
                                 Log.w("BoardStore", "Cannot decode restored asset ${item.assetId}", failure)
                             }
                         }
                         items = restoredItems
-                        if (skipped > 0) message = "$skipped item(s) could not be restored: missing, invalid, or unreadable data."
+                        val skipped = restored.skipped + unreadable
+                        if (skipped > 0) message = "$skipped item(s) could not be restored: " +
+                            "${restored.missing} missing asset(s), ${restored.malformed} malformed item(s), " +
+                            "$unreadable unreadable image(s)."
                         // A later background scan must also preserve referenced but undecodable assets.
-                        reconciliationReferences = restored.snapshot.items.map { it.assetId }.toSet()
+                        reconciliationReferences = restored.referencedAssets
                     }
                 } catch (failure: Exception) {
                     writable = false
@@ -93,16 +96,19 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
             }
             startPendingImports()
             scope.launch {
-                yield()
-                mutex.withLock {
-                    if (writable) {
-                        try {
+                if (!writable) return@launch
+                try {
+                    val candidates = withContext(Dispatchers.IO) { storage?.reconciliationCandidates().orEmpty() }
+                    for (file in candidates) {
+                        yield()
+                        mutex.withLock {
+                            // Imports and saves may have changed ownership during discovery.
                             val referenced = reconciliationReferences + items.map { it.assetId }
-                            withContext(Dispatchers.IO) { storage?.reconcile(referenced) }
-                        } catch (failure: Exception) {
-                            Log.w("BoardStore", "Asset reconciliation failed; retry on next startup", failure)
+                            withContext(Dispatchers.IO) { storage?.removeUnreferenced(file, referenced) }
                         }
                     }
+                } catch (failure: Exception) {
+                    Log.w("BoardStore", "Asset reconciliation failed; retry on next startup", failure)
                 }
             }
         }
@@ -141,6 +147,7 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
         } else content
         val snapshot = snapshot(normalized)
         withContext(Dispatchers.IO) { storage?.save(snapshot) }
+        reconciliationReferences = normalized.map { it.assetId }.toSet()
         dirty = false
         return normalized
     }
@@ -162,7 +169,13 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     renderer.remove(id)
                     val source = sources.remove(id)
                     if (remaining.none { it.assetId == item.assetId }) {
-                        withContext(Dispatchers.IO) { (storage?.asset(item.assetId) ?: source?.file)?.delete() }
+                        withContext(Dispatchers.IO) {
+                            if (storage != null) {
+                                storage.removeUnreferenced(storage.asset(item.assetId), reconciliationReferences)
+                            } else {
+                                source?.file?.delete()
+                            }
+                        }
                     }
                 } catch (failure: Exception) { message = "Image could not be deleted: ${failure.message}" }
             }
