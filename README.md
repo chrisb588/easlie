@@ -20,10 +20,10 @@ Galaxy Tab S9 FE+ 5G running Android 16.
 
 ## Installation
 
-- Download the release APK from [GitHub Releases](https://github.com/chrisb588/easlie/releases) on your tablet.
-- Open the APK and allow installation from your browser or file manager if Android prompts you.
-- Install easlie.
-- Grant display-over-other-apps permission when you first open floating mode.
+1. Download the release APK from [GitHub Releases](https://github.com/chrisb588/easlie/releases) on your tablet.
+2. Open the APK and allow installation from your browser or file manager if Android prompts you.
+3. Install easlie.
+4. Grant display-over-other-apps permission when you first open floating mode.
 
 ## License
 
