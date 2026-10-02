@@ -1,6 +1,6 @@
 # Physical tablet profiling procedure
 
-Issue #8 requires a measured run on the target physical tablet. The [high-resolution results](image-performance-results.md) document the measured 30-image board, cache comparison, and retained tier policy. This procedure alone is not evidence that acceptance criteria pass. The lead's manual gesture and image-quality checks remain part of PR review.
+Issue #8 requires a measured run on the target physical tablet. The [profiling report](profiling/2026-10-02/report.md) documents the measured 30-image board, cache comparison, and retained tier policy. This procedure alone is not evidence that acceptance criteria pass. The lead's manual gesture and image-quality checks remain part of PR review.
 
 ## Setup
 
@@ -68,6 +68,6 @@ After the host workloads, a separate renderer-only experiment compares memory-cl
 
 Memory is sampled at the configured interval, so reported peak PSS is the largest observed sample, not an exact allocation peak. Frame duration is `FrameCompleted - IntendedVsync` for completed rows with zero flags. Completion timestamps beyond their capture time are invalid: exclude and count these records, retaining a later valid observation of the same frame if available. New captures record polling completion time; older captures allow both adb calls their documented 30-second timeouts plus one second of clock tolerance. This checks impossible future timestamps without discarding valid frozen frames. Frame rows are deduplicated by window and intended-vsync timestamp and attributed using device monotonic stage markers. The bounded `gfxinfo` history can still omit frames between polls. The summary reports durations above 16.67 ms as a fixed 60 Hz comparison threshold and above 700 ms as frozen frames; the tablet may have a higher refresh rate. Host/tablet epoch clock calibration aligns memory samples with log markers and records its round-trip uncertainty. Decode durations exclude queue time and canceled jobs. Cache hit ratios count refresh observations, not unique decode requests. Cache occupancy is also sampled from log snapshots.
 
-The initial measured continuation is documented in [the supplied-board baseline](image-performance-baseline.md). Its source limitations and remaining acceptance criteria must stay visible until the representative high-resolution run and measured policy choice are complete.
+The preliminary baseline and representative high-resolution conclusions are consolidated in [the dated profiling report](profiling/2026-10-02/report.md). Keep future reports beside the results for each attempt.
 
 Android references: [dumpsys memory and frame commands](https://developer.android.com/tools/dumpsys), [inspect system trace frame and memory tracks](https://developer.android.com/studio/profile/inspect-traces), and [UI jank detection](https://developer.android.com/studio/profile/jank-detection).

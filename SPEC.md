@@ -354,8 +354,7 @@ After activity and renderer release, diagnostic cache occupancy reached zero and
 119.55 MiB. An earlier floating lifecycle capture found no remaining easlie service or window after
 teardown. These finite measurements do not prove the absence of every possible leak. Detailed methods,
 build identities, limitations, and anonymized measurements are recorded in
-[the performance report](docs/image-performance-results.md),
-[the earlier lifecycle baseline](docs/image-performance-baseline.md), and their linked JSON summaries.
+[the consolidated profiling report](docs/profiling/2026-10-02/report.md) and its linked JSON summaries.
 These measurements preceded the final manual run; they are not new measurements of build `299f542`.
 
 For the final manual run on build `299f542`, the lead confirmed all issue #11 manual criteria. This

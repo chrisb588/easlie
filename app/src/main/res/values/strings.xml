@@ -21,8 +21,6 @@
     <string name="floating_board_close_label">Close floating board</string>
     <string name="floating_board_return_label">Return to full-screen mode</string>
     <string name="floating_board_drag_hint">Drag this header to move</string>
-    <string name="floating_board_resize_hint">Drag the corner to resize</string>
-    <string name="floating_board_content">Minimal feasibility board\nMove with the header and resize from the lower-right corner.</string>
     <string name="floating_board_resize_left_label">Resize floating board from bottom left</string>
     <string name="floating_board_first_run_hint">Move: drag the top bar. Resize: drag a bottom corner. Return or close: tap the board to show controls, then choose a button. Tap this hint to dismiss.</string>
 </resources>

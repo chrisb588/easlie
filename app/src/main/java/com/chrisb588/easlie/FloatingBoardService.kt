@@ -1,5 +1,6 @@
 package com.chrisb588.easlie
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -24,6 +25,7 @@ import android.view.Gravity
 import android.view.Display
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -32,6 +34,8 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.compose.ui.platform.ComposeView
+import androidx.core.app.NotificationCompat
+import androidx.core.content.edit
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -45,6 +49,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.EaslieTheme
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class FloatingBoardService : Service() {
@@ -89,7 +94,7 @@ class FloatingBoardService : Service() {
     override fun onDestroy() {
         removeBoardWindow()
         if (foregroundStarted) {
-            stopForeground(true)
+            stopForeground(STOP_FOREGROUND_REMOVE)
             foregroundStarted = false
         }
         super.onDestroy()
@@ -151,6 +156,8 @@ class FloatingBoardService : Service() {
         }
     }
 
+    // These anchors use physical display edges, independent of the text direction.
+    @SuppressLint("RtlHardcoded")
     private fun attachBoardIfNeeded(): Boolean {
         if (boardView != null) return true
 
@@ -182,8 +189,9 @@ class FloatingBoardService : Service() {
             val view = createBoardView(contextForWindow)
             manager.addView(view, params)
             if (shouldMarkHintSeen) {
-                getSharedPreferences(PREFERENCES, MODE_PRIVATE)
-                    .edit().putBoolean(HINT_SEEN, true).apply()
+                getSharedPreferences(PREFERENCES, MODE_PRIVATE).edit {
+                    putBoolean(HINT_SEEN, true)
+                }
                 shouldMarkHintSeen = false
             }
             windowContext = contextForWindow
@@ -222,6 +230,8 @@ class FloatingBoardService : Service() {
         }
     }
 
+    // These anchors use physical display edges, independent of the text direction.
+    @SuppressLint("RtlHardcoded")
     private fun createBoardView(context: Context): View {
         val root = object : FrameLayout(context) {
             override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -379,10 +389,14 @@ class FloatingBoardService : Service() {
         var initialX = 0
         var initialY = 0
 
-        handle.setOnTouchListener { _, event ->
+        val touchSlop = ViewConfiguration.get(handle.context).scaledTouchSlop
+        var dragged = false
+        handle.setOnClickListener { showControls() }
+        handle.setOnTouchListener { view, event ->
             val params = layoutParams ?: return@setOnTouchListener false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    dragged = false
                     startRawX = event.rawX
                     startRawY = event.rawY
                     synchronizeBoardPosition()
@@ -392,18 +406,27 @@ class FloatingBoardService : Service() {
                 }
 
                 MotionEvent.ACTION_MOVE -> {
+                    dragged = dragged || abs(event.rawX - startRawX) > touchSlop ||
+                        abs(event.rawY - startRawY) > touchSlop
                     params.x = initialX + (event.rawX - startRawX).roundToInt()
                     params.y = initialY + (event.rawY - startRawY).roundToInt()
                     updateBoardLayout()
                     true
                 }
 
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> true
+                MotionEvent.ACTION_UP -> {
+                    if (!dragged) view.performClick()
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> true
                 else -> false
             }
         }
     }
 
+    // These anchors use physical display edges, independent of the text direction.
+    @SuppressLint("RtlHardcoded")
     private fun addResizeListener(handle: View, fromLeft: Boolean = false) {
         var startRawX = 0f
         var startRawY = 0f
@@ -412,10 +435,14 @@ class FloatingBoardService : Service() {
         var initialX = 0
         var initialY = 0
 
-        handle.setOnTouchListener { _, event ->
+        val touchSlop = ViewConfiguration.get(handle.context).scaledTouchSlop
+        var dragged = false
+        handle.setOnClickListener { showControls() }
+        handle.setOnTouchListener { view, event ->
             val params = layoutParams ?: return@setOnTouchListener false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    dragged = false
                     startRawX = event.rawX
                     startRawY = event.rawY
                     synchronizeBoardPosition()
@@ -427,6 +454,8 @@ class FloatingBoardService : Service() {
                 }
 
                 MotionEvent.ACTION_MOVE -> {
+                    dragged = dragged || abs(event.rawX - startRawX) > touchSlop ||
+                        abs(event.rawY - startRawY) > touchSlop
                     val bounds = availableBoardBounds()
                     val deltaX = (event.rawX - startRawX).roundToInt()
                     val deltaY = (event.rawY - startRawY).roundToInt()
@@ -464,7 +493,12 @@ class FloatingBoardService : Service() {
                     true
                 }
 
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> true
+                MotionEvent.ACTION_UP -> {
+                    if (!dragged) view.performClick()
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> true
                 else -> false
             }
         }
@@ -497,6 +531,8 @@ class FloatingBoardService : Service() {
 
     // Android may have fitted a requested position to the display. Start each
     // gesture from the position actually shown, not the old requested offset.
+    // These anchors use physical display edges, independent of the text direction.
+    @SuppressLint("RtlHardcoded")
     private fun synchronizeBoardPosition() {
         val view = boardView ?: return
         val params = layoutParams ?: return
@@ -533,7 +569,7 @@ class FloatingBoardService : Service() {
     private fun stopAndCleanUp() {
         removeBoardWindow()
         if (foregroundStarted) {
-            stopForeground(true)
+            stopForeground(STOP_FOREGROUND_REMOVE)
             foregroundStarted = false
         }
         stopSelf()
@@ -605,20 +641,15 @@ class FloatingBoardService : Service() {
             controlIntent(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
-        } else {
-            Notification.Builder(this)
-        }
-        return builder
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_gallery)
             .setContentTitle(getString(R.string.floating_board_notification_title))
             .setContentText(getString(R.string.floating_board_notification_text))
             .setContentIntent(returnIntent)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(Notification.Action.Builder(null, getString(R.string.return_to_easlie), returnIntent).build())
-            .addAction(Notification.Action.Builder(null, getString(R.string.stop_floating_board), stopIntent).build())
+            .addAction(NotificationCompat.Action.Builder(0, getString(R.string.return_to_easlie), returnIntent).build())
+            .addAction(NotificationCompat.Action.Builder(0, getString(R.string.stop_floating_board), stopIntent).build())
             .build()
     }
 

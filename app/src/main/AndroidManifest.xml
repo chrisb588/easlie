@@ -22,7 +22,6 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:documentLaunchMode="never"
-            android:label="@string/app_name"
             android:theme="@style/Theme.Easlie"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

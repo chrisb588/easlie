@@ -3,13 +3,13 @@ package com.chrisb588.easlie
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ResultReceiver
 import android.provider.Settings
 import android.Manifest
+import androidx.core.net.toUri
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -148,7 +148,7 @@ class MainActivity : ComponentActivity() {
         errorMessage = null
         val settingsIntent = Intent(
             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:$packageName")
+            "package:$packageName".toUri()
         )
         try {
             startActivity(settingsIntent)

@@ -22,3 +22,8 @@ captures/
 *.apk
 *.aab
 *.iml
+
+# Release signing credentials
+*.jks
+*.keystore
+keystore.properties
