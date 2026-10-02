@@ -30,7 +30,7 @@ class EaslieApplication : Application() {
     }
 }
 
-/** One authoritative board. All edits and disk snapshots pass through the same mutex. */
+/** The active board and all destination-bound edits share one serialization mutex. */
 class BoardStore internal constructor(directory: File? = null, cacheBudget: Long = 16L * 1024 * 1024,
     profileImages: Boolean = false, collectionMigration: Boolean = false) {
     var items by mutableStateOf<List<BoardItem>>(emptyList())
@@ -53,7 +53,12 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
         private set
     var migrationFailed by mutableStateOf(false)
         private set
-    val canEdit: Boolean get() = ready && writable && !migrationFailed
+    val canEdit: Boolean get() = ready && writable && !migrationFailed && (collectionStorage == null || activeBoardId != null)
+    internal var boards by mutableStateOf<List<StoredBoard>>(emptyList())
+        private set
+    var activeBoardId by mutableStateOf<String?>(null)
+        private set
+    val collectionReady: Boolean get() = ready && writable && !migrationFailed
 
     private val collectionStorage = if (collectionMigration && directory != null)
         BoardCollectionStorage(directory.parentFile ?: directory, directory) else null
@@ -64,7 +69,14 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     private val canvasOwners = mutableListOf<Any>()
     private var activeCanvasOwner by mutableStateOf<Any?>(null)
     private val mutex = Mutex()
-    private val pending = ArrayDeque<Pair<ContentResolver, List<Uri>>>()
+    private data class PendingImport(
+        val resolver: ContentResolver,
+        val uris: List<Uri>,
+        val destination: String?,
+        val viewport: CanvasViewport?,
+        val size: CanvasSize,
+    )
+    private val pending = ArrayDeque<PendingImport>()
     private var writable = true
     private var dirty = false
     private var ready = storage == null && collectionStorage == null
@@ -89,8 +101,19 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     private suspend fun restoreStorage() {
         try {
             storage = withContext(Dispatchers.IO) {
-                collectionStorage?.initialize()?.let(::BoardStorage) ?: storage
+                if (collectionStorage != null) {
+                    val directory = collectionStorage.initialize()
+                    val collection = collectionStorage.readCollection()
+                    boards = collection.boards
+                    activeBoardId = collection.activeBoardId?.takeIf { id -> directory != null && collection.boards.any { it.id == id } }
+                    directory?.let(::BoardStorage)
+                } else storage
             }
+            items = emptyList()
+            sources.clear()
+            renderer.clear()
+            fullScreen = CanvasViewport()
+            floating = CanvasViewport()
             val restored = withContext(Dispatchers.IO) { storage?.load() }
             if (restored != null) {
                 fullScreen = restored.snapshot.fullScreen
@@ -114,6 +137,9 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     "$unreadable unreadable image(s)."
                 reconciliationReferences = restored.referencedAssets
             }
+            if (collectionStorage != null && activeBoardId == null && boards.isNotEmpty()) {
+                message = "The previous board is unavailable. Open or create a board."
+            }
             writable = true
             migrationFailed = false
             ready = true
@@ -131,6 +157,29 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                 message = "Board could not be loaded. Storage is read-only: ${failure.message}"
                 ready = true
             }
+        }
+    }
+
+    fun createBoard(name: String) = changeBoard { it.createBoard(name) }
+
+    fun openBoard(id: String) = changeBoard { it.openBoard(id) }
+
+    private fun changeBoard(change: (BoardCollectionStorage) -> BoardCollection) {
+        val collection = collectionStorage ?: return
+        scope.launch {
+            mutex.withLock {
+                if (!collectionReady) return@withLock
+                try {
+                    // A failed save throws before either the collection or active canvas changes.
+                    if (dirty) items = persist()
+                    withContext(Dispatchers.IO) { change(collection) }
+                    ready = false
+                    restoreStorage()
+                } catch (failure: Exception) {
+                    message = "Board could not be opened or created: ${failure.message}"
+                }
+            }
+            startPendingImports()
         }
     }
 
@@ -167,7 +216,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     }
 
     private fun edit(change: () -> Unit) {
-        scope.launch { mutex.withLock { if (writable && ready) { change(); dirty = true } } }
+        val destination = activeBoardId
+        scope.launch { mutex.withLock { if (canEdit && destination == activeBoardId) { change(); dirty = true } } }
     }
 
     fun transformViewport(focal: CanvasPoint, pan: CanvasPoint, zoom: Float, size: CanvasSize,
@@ -260,7 +310,7 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
 
     fun enqueueImport(resolver: ContentResolver, uris: List<Uri>) {
         if (uris.isEmpty()) return
-        pending.addLast(resolver to uris)
+        pending.addLast(PendingImport(resolver, uris, activeBoardId, if (canEdit) viewport else null, windowSize))
         startPendingImports()
     }
 
@@ -270,18 +320,27 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     }
 
     private fun startPendingImports() {
-        if (!ready || !writable || importing || pending.isEmpty() || windowSize.width <= 0f || windowSize.height <= 0f) return
+        if (!canEdit || importing || pending.isEmpty() || windowSize.width <= 0f || windowSize.height <= 0f) return
         importing = true
         scope.launch {
             try {
                 while (pending.isNotEmpty()) {
-                    val (resolver, uris) = pending.removeFirst()
+                    val request = pending.removeFirst()
+                    val resolver = request.resolver
+                    val uris = request.uris
+                    // Requests received during startup or management acquire a destination before copying.
+                    val destination = request.destination ?: activeBoardId
+                    val destinationStorage = if (collectionStorage != null && destination != null) {
+                        BoardStorage(collectionStorage.directoryFor(destination))
+                    } else storage
+                    val importViewport = request.viewport ?: viewport
+                    val importSize = request.size.takeIf { it.width > 0f && it.height > 0f } ?: windowSize
                     var accepted = 0
                     var rejected = 0
                     for (uri in uris) {
                         val asset = try {
-                            mutex.withLock {
-                                val currentStorage = storage
+                            run {
+                                val currentStorage = destinationStorage
                                 withContext(Dispatchers.IO) {
                                     if (currentStorage != null) {
                                         val imported = currentStorage.import(resolver, uri)
@@ -294,25 +353,35 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                                     } else {
                                         UUID.randomUUID().toString() to copyImageSource(resolver, uri, null)
                                     }
-                                }.also { reconciliationReferences = reconciliationReferences + it.first }
+                                }
                             }
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { rejected++; continue }
                         mutex.withLock {
                             try {
                                 val (assetId, source) = asset
-                                val center = importCenters(accepted + 1, viewport, windowSize).last()
-                                val maxDimension = minOf(windowSize.width, windowSize.height) * 0.4f / viewport.zoom
+                                val isActiveDestination = destination == activeBoardId
+                                val targetSnapshot = if (isActiveDestination) snapshot() else withContext(Dispatchers.IO) {
+                                    require(collectionStorage?.readCollection()?.boards?.any { it.id == destination } == true) { "Destination board is unavailable" }
+                                    destinationStorage!!.load().snapshot
+                                }
+                                val targetItems = targetSnapshot.items
+                                val center = importCenters(accepted + 1, importViewport, importSize).last()
+                                val maxDimension = minOf(importSize.width, importSize.height) * 0.4f / importViewport.zoom
                                 val scale = maxDimension / maxOf(source.width, source.height)
-                                val existing = if ((items.maxOfOrNull { it.zIndex } ?: 0) > Int.MAX_VALUE - 10) {
-                                    normalizedStack(items)
-                                } else items
+                                val existing = if ((targetItems.maxOfOrNull { it.zIndex } ?: 0) > Int.MAX_VALUE - 10) {
+                                    normalizedStack(targetItems)
+                                } else targetItems
                                 val id = UUID.randomUUID().toString()
                                 val item = BoardItem(id, center, source.width * scale, source.height * scale,
                                     zIndex = (existing.maxOfOrNull { it.zIndex } ?: 0) + 10, assetId = assetId)
-                                val committed = persist(existing + item)
-                                sources[id] = source
-                                items = committed
+                                if (isActiveDestination) {
+                                    val committed = persist(existing + item)
+                                    sources[id] = source
+                                    items = committed
+                                } else {
+                                    withContext(Dispatchers.IO) { destinationStorage!!.save(targetSnapshot.copy(items = existing + item)) }
+                                }
                                 accepted++
                             } catch (failure: Exception) {
                                 withContext(Dispatchers.IO) { asset.second.file.delete() }

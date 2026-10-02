@@ -3,9 +3,10 @@ package com.chrisb588.easlie
 import android.system.Os
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 
 internal data class StoredBoard(val id: String, val name: String)
-internal data class BoardCollection(val activeBoardId: String, val boards: List<StoredBoard>)
+internal data class BoardCollection(val activeBoardId: String?, val boards: List<StoredBoard>)
 
 /** Owns the collection index and performs the v0.1 single-board migration. */
 internal class BoardCollectionStorage(
@@ -16,14 +17,21 @@ internal class BoardCollectionStorage(
     private val atomicReplace: (File, File) -> Unit = { source, destination ->
         Os.rename(source.path, destination.path)
     },
+    private val createEmptyBoard: (File) -> Unit = { BoardStorage(it).save(BoardSnapshot()) },
+    private val newBoardId: () -> String = { UUID.randomUUID().toString() },
 ) {
     private val boardsDirectory = File(root, "boards")
     private val indexFile = File(root, "boards.index")
     val hasCollection: Boolean get() = indexFile.exists()
 
-    fun initialize(): File {
+    fun initialize(): File? {
         val collection = if (indexFile.exists()) readCollection() else migrateLegacy()
-        val activeDirectory = File(boardsDirectory, collection.activeBoardId)
+        val activeId = collection.activeBoardId ?: return null
+        if (collection.boards.none { it.id == activeId }) return null
+        val activeDirectory = directoryFor(activeId)
+        // A deleted/missing active board returns to management. Keep the saved identity
+        // and board list intact so startup never silently selects or recreates a board.
+        if (!activeDirectory.exists()) return null
         require(activeDirectory.isDirectory && File(activeDirectory, "board.json").isFile) {
             "Active board storage is unavailable; collection is read-only."
         }
@@ -31,6 +39,46 @@ internal class BoardCollectionStorage(
         // cannot turn a failed migration into an apparently successful empty board.
         validateBoard(activeDirectory)
         return activeDirectory
+    }
+
+    internal fun directoryFor(id: String): File {
+        require(id.matches(ID_PATTERN)) { "Invalid board identifier" }
+        return File(boardsDirectory, id)
+    }
+
+    internal fun createBoard(name: String, beforeSwitch: () -> Unit = {}): BoardCollection {
+        val requestedName = name.trim()
+        require(requestedName.isNotEmpty()) { "Board name is empty" }
+        val current = if (indexFile.exists()) readCollection() else migrateLegacy()
+        val uniqueName = uniqueName(requestedName, current.boards)
+        beforeSwitch()
+        val id = uniqueId(current.boards)
+        val directory = directoryFor(id)
+        check(directory.mkdirs()) { "Could not create board storage" }
+        try {
+            createEmptyBoard(directory)
+            validateBoard(directory)
+            val updated = BoardCollection(id, listOf(StoredBoard(id, uniqueName)) + current.boards)
+            writeCollection(updated)
+            return updated
+        } catch (failure: Exception) {
+            directory.deleteRecursively()
+            throw failure
+        }
+    }
+
+    internal fun openBoard(id: String, beforeSwitch: () -> Unit = {}): BoardCollection {
+        val current = readCollection()
+        val board = current.boards.firstOrNull { it.id == id }
+            ?: error("Board is unavailable")
+        val directory = directoryFor(board.id)
+        require(directory.isDirectory && File(directory, "board.json").isFile) {
+            "Board storage is unavailable; collection is read-only."
+        }
+        validateBoard(directory)
+        beforeSwitch()
+        return current.copy(activeBoardId = id, boards = listOf(board) + current.boards.filterNot { it.id == id })
+            .also(::writeCollection)
     }
 
     private fun migrateLegacy(): BoardCollection {
@@ -52,8 +100,9 @@ internal class BoardCollectionStorage(
             require(legacyFiles.isEmpty()) {
                 "Legacy board files exist without a manifest; original storage is retained."
             }
-            destination.mkdirs()
-            BoardStorage(destination).save(BoardSnapshot())
+            val empty = BoardCollection(null, emptyList())
+            writeCollection(empty)
+            return empty
         }
         validateBoard(destination)
 
@@ -68,30 +117,29 @@ internal class BoardCollectionStorage(
         val version = lines.firstOrNull { it.startsWith("schemaVersion=") }
             ?.substringAfter('=')?.toIntOrNull()
         require(version == SCHEMA_VERSION) { "Unsupported board collection schema; storage is read-only." }
-        val activeId = lines.firstOrNull { it.startsWith("activeBoard=") }?.substringAfter('=')
+        val activeValue = lines.firstOrNull { it.startsWith("activeBoard=") }?.substringAfter('=')
             ?: error("Board collection has no active board")
-        require(activeId.matches(ID_PATTERN)) { "Invalid active board identifier" }
+        val activeId = activeValue.ifEmpty { null }
+        require(activeId == null || activeId.matches(ID_PATTERN)) { "Invalid active board identifier" }
         val boards = lines.filter { it.startsWith("board=") }.map { line ->
             val parts = line.substringAfter('=').split('|', limit = 2)
             require(parts.size == 2 && parts[0].matches(ID_PATTERN)) { "Invalid board entry" }
             StoredBoard(parts[0], decodeName(parts[1])).also { require(it.name.isNotBlank()) { "Board name is empty" } }
         }
-        require(boards.isNotEmpty() && boards.any { it.id == activeId }) { "Active board is unavailable" }
         require(boards.map { it.id }.distinct().size == boards.size) { "Duplicate board identifier" }
+        require(boards.map { it.name }.distinct().size == boards.size) { "Duplicate board name" }
         return BoardCollection(activeId, boards)
     }
 
-    private fun writeCollection(collection: BoardCollection) {
-        require(collection.activeBoardId.matches(ID_PATTERN)) { "Invalid active board identifier" }
-        require(collection.boards.isNotEmpty() && collection.boards.any { it.id == collection.activeBoardId }) {
-            "Active board is unavailable"
-        }
+    internal fun writeCollection(collection: BoardCollection) {
+        require(collection.activeBoardId == null || collection.activeBoardId.matches(ID_PATTERN)) { "Invalid active board identifier" }
         require(collection.boards.map { it.id }.distinct().size == collection.boards.size) { "Duplicate board identifier" }
         require(collection.boards.all { it.id.matches(ID_PATTERN) && it.name.isNotBlank() }) { "Invalid board entry" }
+        require(collection.boards.map { it.name }.distinct().size == collection.boards.size) { "Duplicate board name" }
         val encoded = buildString {
             appendLine(MAGIC)
             appendLine("schemaVersion=$SCHEMA_VERSION")
-            appendLine("activeBoard=${collection.activeBoardId}")
+            appendLine("activeBoard=${collection.activeBoardId.orEmpty()}")
             collection.boards.forEach { board ->
                 val name = encodeName(board.name)
                 appendLine("board=${board.id}|$name")
@@ -108,6 +156,26 @@ internal class BoardCollectionStorage(
         } finally {
             temporary.delete()
         }
+    }
+
+    private fun uniqueName(requested: String, boards: List<StoredBoard>): String {
+        if (boards.none { it.name == requested }) return requested
+        var suffix = 2
+        while (boards.any { it.name == "$requested ($suffix)" }) suffix++
+        return "$requested ($suffix)"
+    }
+
+    private fun uniqueId(boards: List<StoredBoard>): String {
+        val used = boards.mapTo(mutableSetOf()) { it.id }
+        val base = newBoardId()
+        require(base.matches(ID_PATTERN)) { "Invalid board identifier" }
+        var candidate = base
+        var suffix = 2
+        while (candidate in used || directoryFor(candidate).exists()) {
+            candidate = "$base-$suffix"
+            suffix++
+        }
+        return candidate
     }
 
     private companion object {
