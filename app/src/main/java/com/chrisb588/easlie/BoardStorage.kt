@@ -20,7 +20,13 @@ internal data class BoardSnapshot(
     val floating: CanvasViewport = CanvasViewport(),
 )
 
-internal data class RestoredBoard(val snapshot: BoardSnapshot, val skipped: Int)
+internal data class RestoredBoard(
+    val snapshot: BoardSnapshot,
+    val skipped: Int,
+    val missing: Int = 0,
+    val malformed: Int = 0,
+    val referencedAssets: Set<String> = snapshot.items.map { it.assetId }.toSet(),
+)
 internal data class ImportedAsset(val id: String, val bitmap: Bitmap)
 
 /** Called only by the store's serialized I/O operations. */
@@ -87,7 +93,9 @@ internal class BoardStorage(private val directory: File) {
         require(json.getInt("schemaVersion") == 1) { "Unsupported board schema; storage is read-only." }
         val viewports = json.getJSONObject("viewports")
         val items = json.getJSONArray("items")
-        var skipped = 0
+        var missing = 0
+        var malformed = 0
+        val referencedAssets = mutableSetOf<String>()
         val ids = mutableSetOf<String>()
         val restored = buildList {
             for (index in 0 until items.length()) {
@@ -95,7 +103,14 @@ internal class BoardStorage(private val directory: File) {
                     val item = items.getJSONObject(index)
                     val id = item.getString("id")
                     val assetId = item.getString("assetId")
-                    require(id.isNotBlank() && id !in ids && asset(assetId).isFile)
+                    val file = asset(assetId)
+                    referencedAssets.add(assetId)
+                    require(id.isNotBlank() && id !in ids) { "Invalid or duplicate item identifier" }
+                    if (!file.isFile) {
+                        Log.w("BoardStorage", "Cannot restore item $index ($id): missing asset $assetId")
+                        missing++
+                        continue
+                    }
                     val width = item.finiteFloat("width")
                     val height = item.finiteFloat("height")
                     require(width > 0 && height > 0)
@@ -103,17 +118,29 @@ internal class BoardStorage(private val directory: File) {
                         item.finiteFloat("rotationDegrees"), item.getInt("zIndex"), assetId))
                     ids.add(id)
                 } catch (failure: Exception) {
-                    skipped++
+                    malformed++
                     Log.w("BoardStorage", "Cannot restore item $index", failure)
                 }
             }
         }
         return RestoredBoard(BoardSnapshot(restored, readViewport(viewports.getJSONObject("fullScreen")),
-            readViewport(viewports.getJSONObject("floating"))), skipped)
+            readViewport(viewports.getJSONObject("floating"))), missing + malformed, missing, malformed, referencedAssets)
+    }
+
+    /** Discovery runs without the mutation lock; callers recheck references before deletion. */
+    fun reconciliationCandidates(): List<File> =
+        assets.listFiles()?.toList().orEmpty() + File(directory, "board.json.tmp")
+
+    fun removeUnreferenced(file: File, referenced: Set<String>): Boolean {
+        if (file.parentFile == assets && file.name in referenced) return true
+        if (!file.exists()) return true
+        return file.delete().also { deleted ->
+            if (!deleted) Log.w("BoardStorage", "Cleanup deferred until later reconciliation: ${file.name}")
+        }
     }
 
     fun reconcile(referenced: Set<String>) {
-        assets.listFiles()?.forEach { file -> if (file.name.endsWith(".tmp") || file.name !in referenced) file.delete() }
+        reconciliationCandidates().forEach { removeUnreferenced(it, referenced) }
     }
 
     private fun viewportJson(viewport: CanvasViewport) = JSONObject().put("centerX", viewport.center.x)

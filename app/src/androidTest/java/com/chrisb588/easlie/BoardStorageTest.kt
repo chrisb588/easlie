@@ -10,7 +10,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BoardStorageTest {
-    private val context get() = InstrumentationRegistry.getInstrumentation().context
+    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     private fun withStorage(test: (BoardStorage, File) -> Unit) {
         val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
@@ -74,23 +74,24 @@ class BoardStorageTest {
     }
 
     @Test fun ownedImageSurvivesSourceRemovalAndRejectedImportCleansTemporaryData() = withStorage { storage, directory ->
-        val source = File(context.filesDir, "storage-source.png")
+        val source = Uri.parse("content://com.chrisb588.easlie.test.images/storage-source.png")
         val bitmap = Bitmap.createBitmap(20, 10, Bitmap.Config.ARGB_8888)
-        source.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        context.contentResolver.openOutputStream(source)!!.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
-        val asset = storage.import(context.contentResolver, Uri.parse("content://com.chrisb588.easlie.test.images/${source.name}"))
+        val asset = storage.import(context.contentResolver, source)
         asset.bitmap.recycle()
-        source.delete()
+        context.contentResolver.delete(source, null, null)
         val restored = loadImage(storage.asset(asset.id))
         assertEquals(20, restored.width)
         restored.recycle()
         val before = File(directory, "assets").list()!!.toSet()
-        val corrupt = File(context.filesDir, "storage-corrupt.png").apply { writeText("invalid") }
+        val corrupt = Uri.parse("content://com.chrisb588.easlie.test.images/storage-corrupt.png")
+        context.contentResolver.openOutputStream(corrupt)!!.use { it.write("invalid".toByteArray()) }
         try {
-            storage.import(context.contentResolver, Uri.parse("content://com.chrisb588.easlie.test.images/${corrupt.name}"))
+            storage.import(context.contentResolver, corrupt)
             fail("Expected rejection")
         } catch (_: Exception) { }
-        finally { corrupt.delete() }
+        finally { context.contentResolver.delete(corrupt, null, null) }
         assertEquals(before, File(directory, "assets").list()!!.toSet())
     }
 
@@ -111,4 +112,58 @@ class BoardStorageTest {
         catch (_: IllegalArgumentException) { }
         assertArrayEquals(before, manifest.readBytes())
     }
+    @Test fun reportsMissingAndMalformedItemsAndProtectsTheirAssetsUntilSave() = withStorage { storage, directory ->
+        storage.asset("valid-asset").apply { parentFile!!.mkdirs(); writeText("owned") }
+        storage.asset("malformed-asset").writeText("owned")
+        storage.save(BoardSnapshot(listOf(
+            BoardItem("valid", CanvasPoint(0f, 0f), 10f, 10f, zIndex = 10, assetId = "valid-asset"),
+            BoardItem("missing", CanvasPoint(0f, 0f), 10f, 10f, zIndex = 10, assetId = "missing-asset"),
+            BoardItem("malformed", CanvasPoint(0f, 0f), 10f, 10f, zIndex = 10, assetId = "malformed-asset"),
+        )))
+        val manifest = File(directory, "board.json")
+        val json = org.json.JSONObject(manifest.readText())
+        json.getJSONArray("items").getJSONObject(2).put("width", -1)
+        json.getJSONArray("items").put("not an item")
+        manifest.writeText(json.toString())
+        val before = manifest.readBytes()
+        val restored = storage.load()
+        assertEquals(3, restored.skipped)
+        assertEquals(1, restored.missing)
+        assertEquals(2, restored.malformed)
+        assertEquals(listOf("valid"), restored.snapshot.items.map { it.id })
+        storage.reconcile(restored.referencedAssets)
+        assertTrue(storage.asset("malformed-asset").exists())
+        assertArrayEquals(before, manifest.readBytes())
+        storage.save(restored.snapshot)
+        storage.reconcile(restored.snapshot.items.map { it.assetId }.toSet())
+        assertFalse(storage.asset("malformed-asset").exists())
+    }
+
+    @Test fun cleanupRemovesStaleFilesPreservesReferencesAndRetriesFailedDeletion() = withStorage { storage, directory ->
+        storage.asset("kept").apply { parentFile!!.mkdirs(); writeText("owned") }
+        storage.asset("orphan").writeText("unused")
+        File(directory, "assets/stale.tmp").writeText("partial")
+        File(directory, "board.json.tmp").writeText("partial")
+        // Nonempty directory makes deletion fail deterministically without permission assumptions.
+        val failed = storage.asset("retry").apply { mkdir(); File(this, "child").writeText("blocked") }
+        storage.reconcile(setOf("kept"))
+        assertTrue(storage.asset("kept").isFile)
+        assertFalse(storage.asset("orphan").exists())
+        assertFalse(File(directory, "assets/stale.tmp").exists())
+        assertFalse(File(directory, "board.json.tmp").exists())
+        assertTrue(failed.exists())
+        File(failed, "child").delete()
+        storage.reconcile(setOf("kept"))
+        assertFalse(failed.exists())
+    }
+
+    @Test fun discoveryRechecksReferencesBeforeDeletingNewlyCommittedAsset() = withStorage { storage, _ ->
+        val imported = storage.asset("new-asset").apply { parentFile!!.mkdirs(); writeText("owned") }
+        val candidates = storage.reconciliationCandidates()
+        assertTrue(imported in candidates)
+        storage.save(BoardSnapshot(listOf(BoardItem("new", CanvasPoint(0f, 0f), 10f, 10f, zIndex = 10, assetId = "new-asset"))))
+        candidates.forEach { storage.removeUnreferenced(it, setOf("new-asset")) }
+        assertTrue(imported.isFile)
+    }
+
 }
