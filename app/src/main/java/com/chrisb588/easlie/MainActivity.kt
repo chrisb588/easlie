@@ -218,7 +218,7 @@ private fun FloatingBoardScreen(
 
         if (overlayPermissionGranted) {
             Text(text = stringResource(R.string.floating_board_permission_granted))
-            Button(onClick = onStartFloatingBoard) {
+            Button(onClick = onStartFloatingBoard, enabled = board.canEdit) {
                 Text(text = stringResource(R.string.start_floating_board))
             }
         } else {
@@ -235,13 +235,17 @@ private fun FloatingBoardScreen(
             )
         }
 
-        Button(onClick = onAddImages) {
+        Button(onClick = onAddImages, enabled = board.canEdit) {
             Text(if (board.importing) "Importing… Add images" else "Add images")
         }
         board.message?.let { message ->
             Row {
                 Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
-                TextButton(onClick = { board.message = null }) { Text("Dismiss") }
+                if (board.migrationFailed) {
+                    TextButton(onClick = board::retryMigration) { Text("Retry") }
+                } else {
+                    TextButton(onClick = { board.message = null }) { Text("Dismiss") }
+                }
             }
         }
         FullScreenCanvas(board = board, modifier = Modifier.weight(1f))

@@ -115,6 +115,54 @@ class BoardStorePersistenceTest {
         } finally { directory.deleteRecursively() }
     }
 
+    @Test fun migrationFailureBlocksEditsAndRetryLoadsThePreservedBoard() {
+        val root = File(context.cacheDir, "board-migration-${UUID.randomUUID()}")
+        val legacy = File(root, "board")
+        val storage = BoardStorage(legacy)
+        val full = CanvasViewport(CanvasPoint(13f, -8f), 2f)
+        val floating = CanvasViewport(CanvasPoint(-4f, 7f), .5f)
+        val expected = BoardSnapshot(fullScreen = full, floating = floating)
+        storage.save(expected)
+        val manifest = File(legacy, "board.json")
+        manifest.writeText("{\"schemaVersion\":99}")
+        val unsupported = manifest.readBytes()
+        var store: BoardStore? = null
+        try {
+            onMain { store = BoardStore(legacy, collectionMigration = true) }
+            await { store!!.migrationFailed }
+            val attempted = BoardItem("blocked", CanvasPoint(1f, 2f), 30f, 20f, zIndex = 10, assetId = "blocked")
+            onMain {
+                assertFalse(store!!.canEdit)
+                store!!.update(attempted)
+                store!!.setViewport(CanvasViewport(zoom = 3f), false)
+                store!!.save()
+            }
+            Thread.sleep(100)
+            onMain {
+                assertTrue(store!!.items.isEmpty())
+                assertEquals(CanvasViewport(), store!!.viewportFor(false))
+                assertEquals(unsupported.toList(), manifest.readBytes().toList())
+            }
+            assertFalse(File(root, "boards.index").exists())
+
+            storage.save(expected)
+            onMain { store!!.retryMigration() }
+            await { store!!.canEdit }
+            onMain {
+                assertFalse(store!!.migrationFailed)
+                assertTrue(store!!.items.isEmpty())
+                assertEquals(full, store!!.viewportFor(false))
+                assertEquals(floating, store!!.viewportFor(true))
+            }
+            val collection = BoardCollectionStorage(root, legacy).readCollection()
+            assertEquals("Board 1", collection.boards.single().name)
+            assertEquals(expected, BoardStorage(File(root, "boards/${collection.activeBoardId}")).load().snapshot)
+        } finally {
+            store?.let { board -> onMain { board.releaseImages() } }
+            root.deleteRecursively()
+        }
+    }
+
     @Test fun freshStoreRestoresContentBothViewportsAndReportsUnreadableImages() {
         val directory = File(context.cacheDir, "restored-board-${UUID.randomUUID()}")
         val storage = BoardStorage(directory)
