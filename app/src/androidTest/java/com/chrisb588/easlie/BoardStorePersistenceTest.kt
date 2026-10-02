@@ -11,7 +11,7 @@ import org.junit.Test
 
 class BoardStorePersistenceTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
-    private val context get() = instrumentation.context
+    private val context get() = instrumentation.targetContext
     private fun onMain(action: () -> Unit) = instrumentation.runOnMainSync(action)
     private fun await(condition: () -> Boolean) {
         val deadline = android.os.SystemClock.uptimeMillis() + 5000
@@ -26,9 +26,9 @@ class BoardStorePersistenceTest {
 
     @Test fun importsCommitBeforePublicationAndDeletionFailurePreservesItemAndAsset() {
         val directory = File(context.cacheDir, "board-store-${UUID.randomUUID()}")
-        val source = File(context.filesDir, "store-import.png")
+        val source = Uri.parse("content://com.chrisb588.easlie.test.images/store-import.png")
         val bitmap = Bitmap.createBitmap(30, 20, Bitmap.Config.ARGB_8888)
-        source.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        context.contentResolver.openOutputStream(source)!!.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
         lateinit var store: BoardStore
         try {
@@ -36,7 +36,7 @@ class BoardStorePersistenceTest {
                 store = BoardStore(directory)
                 store.resizeWindow(CanvasSize(600f, 400f))
                 store.enqueueImport(context.contentResolver,
-                    listOf(Uri.parse("content://com.chrisb588.easlie.test.images/${source.name}")))
+                    listOf(source))
             }
             await { store.items.size == 1 && !store.importing }
             val persisted = BoardStorage(directory).load().snapshot.items.single()
@@ -46,13 +46,13 @@ class BoardStorePersistenceTest {
             File(directory, "board.json.tmp").mkdir()
             onMain {
                 store.enqueueImport(context.contentResolver,
-                    listOf(Uri.parse("content://com.chrisb588.easlie.test.images/${source.name}")))
+                    listOf(source))
             }
             await { !store.importing && store.message?.contains("could not be imported or saved") == true }
             assertArrayEquals(existingManifest, File(directory, "board.json").readBytes())
             assertEquals(existingAssets, File(directory, "assets").list()!!.toSet())
             onMain { assertEquals(listOf(persisted), store.items) }
-            source.delete()
+            context.contentResolver.delete(source, null, null)
             File(directory, "board.json.tmp").mkdir()
             onMain { store.delete(persisted.id) }
             await { store.message?.startsWith("Image could not be deleted") == true }
@@ -63,7 +63,7 @@ class BoardStorePersistenceTest {
             await { store.items.isEmpty() }
             assertTrue(BoardStorage(directory).load().snapshot.items.isEmpty())
             await { !BoardStorage(directory).asset(persisted.assetId).exists() }
-        } finally { source.delete(); directory.deleteRecursively() }
+        } finally { context.contentResolver.delete(source, null, null); directory.deleteRecursively() }
     }
 
     @Test fun continuousTransformsSavePeriodicallyAndExplicitBoundarySavesBothViewports() {

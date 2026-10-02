@@ -45,12 +45,18 @@ public class IntakeTestProvider extends ContentProvider {
 
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         String name = uri.getLastPathSegment();
-        if (name == null || !name.matches("[a-zA-Z0-9.-]+")) throw new FileNotFoundException("Invalid fixture name");
-        return ParcelFileDescriptor.open(new File(getContext().getFilesDir(), name), ParcelFileDescriptor.MODE_READ_ONLY);
+        if (name == null || !name.matches("[a-zA-Z0-9.-]+") || name.equals(".") || name.equals("..")) throw new FileNotFoundException("Invalid fixture name");
+        return ParcelFileDescriptor.open(new File(getContext().getFilesDir(), name), ParcelFileDescriptor.parseMode(mode));
     }
 
     @Override public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) { return null; }
     @Override public Uri insert(Uri uri, ContentValues values) { return null; }
     @Override public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) { return 0; }
-    @Override public int delete(Uri uri, String selection, String[] selectionArgs) { return 0; }
+    @Override public int delete(Uri uri, String selection, String[] selectionArgs) {
+        String name = uri.getLastPathSegment();
+        if (name == null || !name.matches("[a-zA-Z0-9.-]+") || name.equals(".") || name.equals("..")) {
+            throw new IllegalArgumentException("Invalid fixture name");
+        }
+        return new File(getContext().getFilesDir(), name).delete() ? 1 : 0;
+    }
 }

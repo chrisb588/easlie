@@ -10,7 +10,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BoardStorageTest {
-    private val context get() = InstrumentationRegistry.getInstrumentation().context
+    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     private fun withStorage(test: (BoardStorage, File) -> Unit) {
         val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
@@ -74,23 +74,24 @@ class BoardStorageTest {
     }
 
     @Test fun ownedImageSurvivesSourceRemovalAndRejectedImportCleansTemporaryData() = withStorage { storage, directory ->
-        val source = File(context.filesDir, "storage-source.png")
+        val source = Uri.parse("content://com.chrisb588.easlie.test.images/storage-source.png")
         val bitmap = Bitmap.createBitmap(20, 10, Bitmap.Config.ARGB_8888)
-        source.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        context.contentResolver.openOutputStream(source)!!.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
-        val asset = storage.import(context.contentResolver, Uri.parse("content://com.chrisb588.easlie.test.images/${source.name}"))
+        val asset = storage.import(context.contentResolver, source)
         asset.bitmap.recycle()
-        source.delete()
+        context.contentResolver.delete(source, null, null)
         val restored = loadImage(storage.asset(asset.id))
         assertEquals(20, restored.width)
         restored.recycle()
         val before = File(directory, "assets").list()!!.toSet()
-        val corrupt = File(context.filesDir, "storage-corrupt.png").apply { writeText("invalid") }
+        val corrupt = Uri.parse("content://com.chrisb588.easlie.test.images/storage-corrupt.png")
+        context.contentResolver.openOutputStream(corrupt)!!.use { it.write("invalid".toByteArray()) }
         try {
-            storage.import(context.contentResolver, Uri.parse("content://com.chrisb588.easlie.test.images/${corrupt.name}"))
+            storage.import(context.contentResolver, corrupt)
             fail("Expected rejection")
         } catch (_: Exception) { }
-        finally { corrupt.delete() }
+        finally { context.contentResolver.delete(corrupt, null, null) }
         assertEquals(before, File(directory, "assets").list()!!.toSet())
     }
 
