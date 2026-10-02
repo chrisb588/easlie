@@ -60,6 +60,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current.density
     val imageOwner = remember(board) { Any() }
+    val interactive = board.isActiveCanvas(imageOwner)
     var canvasSize by remember { mutableStateOf(CanvasSize(0f, 0f)) }
     DisposableEffect(board, imageOwner) {
         board.attachCanvas(imageOwner)
@@ -86,7 +87,8 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                 .onSizeChanged { canvasSize = CanvasSize(it.width.toFloat(), it.height.toFloat()) }
                 .testTag(if (floatingMode) CanvasTestTags.FloatingBoard else CanvasTestTags.FullScreenBoard)
                 .semantics { contentDescription = "Reference image board. Tap to select; drag a selected image or its handles. Double-tap for Delete." }
-                .pointerInput(board.activeBoardId, board, handleRadius, rotationGap) {
+                .pointerInput(board.activeBoardId, interactive, board, handleRadius, rotationGap) {
+                    if (!interactive) return@pointerInput
                     var lastTapTime = 0L
                     var lastTapId: String? = null
                     var lastTapPosition = Offset.Zero
