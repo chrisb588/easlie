@@ -55,8 +55,8 @@ private val corners = listOf(Handle(-1f, -1f), Handle(1f, -1f), Handle(1f, 1f), 
 
 @Composable
 fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingMode: Boolean = false) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
-    var menuId by remember { mutableStateOf<String?>(null) }
+    var selectedId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
+    var menuId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current.density
     val imageOwner = remember(board) { Any() }
@@ -86,7 +86,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                 .onSizeChanged { canvasSize = CanvasSize(it.width.toFloat(), it.height.toFloat()) }
                 .testTag(if (floatingMode) CanvasTestTags.FloatingBoard else CanvasTestTags.FullScreenBoard)
                 .semantics { contentDescription = "Reference image board. Tap to select; drag a selected image or its handles. Double-tap for Delete." }
-                .pointerInput(board, handleRadius, rotationGap) {
+                .pointerInput(board.activeBoardId, board, handleRadius, rotationGap) {
                     var lastTapTime = 0L
                     var lastTapId: String? = null
                     var lastTapPosition = Offset.Zero

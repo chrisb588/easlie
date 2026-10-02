@@ -21,6 +21,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -203,6 +208,21 @@ private fun FloatingBoardScreen(
     onStartFloatingBoard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var creating by remember { mutableStateOf(false) }
+    var opening by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("Board 1") }
+    if (creating) {
+        AlertDialog(onDismissRequest = { creating = false }, title = { Text("Create board") },
+            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Board name") }) },
+            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { board.createBoard(name); creating = false }) { Text("Create") } },
+            dismissButton = { TextButton(onClick = { creating = false }) { Text("Cancel") } })
+    }
+    if (opening) {
+        AlertDialog(onDismissRequest = { opening = false }, title = { Text("Open board") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                board.boards.forEach { entry -> TextButton(onClick = { board.openBoard(entry.id); opening = false }) { Text(entry.name) } }
+            } }, confirmButton = { TextButton(onClick = { opening = false }) { Text("Close") } })
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -213,6 +233,11 @@ private fun FloatingBoardScreen(
             text = stringResource(R.string.floating_board_title),
             style = MaterialTheme.typography.headlineSmall
         )
+        board.boards.firstOrNull { it.id == board.activeBoardId }?.let { Text(it.name) }
+        Row {
+            Button(enabled = board.collectionReady, onClick = { name = "Board 1"; creating = true }) { Text("Create board") }
+            TextButton(enabled = board.collectionReady && board.boards.isNotEmpty(), onClick = { opening = true }) { Text("Open board") }
+        }
         Text(text = stringResource(R.string.floating_board_permission_explanation))
         Text(text = stringResource(R.string.floating_board_full_screen_note))
 
@@ -251,7 +276,7 @@ private fun FloatingBoardScreen(
         if (board.canEdit) {
             FullScreenCanvas(board = board, modifier = Modifier.weight(1f))
         } else if (!board.migrationFailed) {
-            Text("Opening board…")
+            Text(if (board.collectionReady) "Create or open a board to continue." else "Opening board…")
         }
     }
 }

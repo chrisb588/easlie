@@ -26,7 +26,7 @@ class BoardCollectionStorageTest {
     @Test fun populatedLegacyBoardIsCopiedAndRetriedMigrationKeepsOneStableBoard() = withDirectories { root, legacy ->
         val (manifest, asset) = seedLegacy(legacy)
         val first = newStorage(root, legacy)
-        val migratedDirectory = first.initialize()
+        val migratedDirectory = first.initialize()!!
 
         assertEquals("Board 1", first.readCollection().boards.single().name)
         assertEquals("00000000-0000-4000-8000-000000000001", migratedDirectory.name)
@@ -64,7 +64,7 @@ class BoardCollectionStorageTest {
         assertArrayEquals(manifest, File(legacy, "board.json").readBytes())
         assertArrayEquals(asset, File(legacy, "assets/asset-a").readBytes())
         fail = false
-        val migrated = storage.initialize()
+        val migrated = storage.initialize()!!
         assertArrayEquals(manifest, File(migrated, "board.json").readBytes())
         assertArrayEquals(asset, File(migrated, "assets/asset-a").readBytes())
         assertFalse(File(migrated, "partial").exists())
@@ -120,9 +120,131 @@ class BoardCollectionStorageTest {
         assertEquals("preserve", asset.readText())
     }
 
+    @Test fun noLegacyBoardInitializesAnEmptyManagementCollection() = withDirectories { root, legacy ->
+        val storage = newStorage(root, legacy)
+
+        assertNull(storage.initialize())
+        assertEquals(BoardCollection(null, emptyList()), storage.readCollection())
+        assertEquals("activeBoard=", File(root, "boards.index").readLines().first { it.startsWith("activeBoard=") })
+    }
+
+    @Test fun createdBoardsAreEmptyUniquelyNamedAndOrderedByMostRecentOpen() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ids = ArrayDeque(listOf("board-a", "board-a")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+
+        val first = storage.createBoard("  References  ")
+        val second = storage.createBoard("References")
+        assertEquals("References", first.boards.first().name)
+        assertEquals("References (2)", second.boards.first().name)
+        assertEquals("board-a-2", second.activeBoardId)
+        assertTrue(File(root, "boards/board-a/board.json").isFile)
+        assertTrue(File(root, "boards/board-a-2/board.json").isFile)
+        assertTrue(BoardStorage(storage.directoryFor("board-a")).load().snapshot.items.isEmpty())
+
+        val opened = storage.openBoard("board-a")
+        assertEquals("board-a", opened.activeBoardId)
+        assertEquals(listOf("board-a", "board-a-2"), opened.boards.map { it.id })
+        assertEquals(opened, storage.readCollection())
+    }
+
+    @Test fun missingActiveBoardReturnsToManagementWithoutChangingTheCollection() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy)
+        val collection = BoardCollection("missing", listOf(StoredBoard("present", "Here")))
+        storage.writeCollection(collection)
+        File(root, "boards/present").mkdirs()
+        writeEmptyFixture(File(root, "boards/present"))
+        // Stale storage must not revive an identity that is absent from the collection.
+        writeEmptyFixture(storage.directoryFor("missing"))
+        val before = File(root, "boards.index").readBytes()
+
+        assertNull(storage.initialize())
+        assertArrayEquals(before, File(root, "boards.index").readBytes())
+        assertEquals(collection, storage.readCollection())
+    }
+
+    @Test fun openingMissingOrInvalidBoardDoesNotChangeActiveBoardOrOrder() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy)
+        val collection = BoardCollection("present", listOf(StoredBoard("present", "Here"), StoredBoard("missing", "Gone")))
+        storage.writeCollection(collection)
+        File(root, "boards/present").mkdirs()
+        writeEmptyFixture(File(root, "boards/present"))
+        try { storage.openBoard("missing"); fail("Expected missing directory") }
+        catch (expected: IllegalArgumentException) { assertTrue(expected.message!!.contains("unavailable")) }
+        assertEquals(collection, storage.readCollection())
+    }
+
+    @Test fun failedSaveBeforeCreateOrOpenLeavesCollectionAndBoardDirectoriesUntouched() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ids = ArrayDeque(listOf("new-board")))
+        val collection = BoardCollection("present", listOf(StoredBoard("present", "Here"), StoredBoard("next", "Next")))
+        storage.writeCollection(collection)
+        writeEmptyFixture(storage.directoryFor("present"))
+        writeEmptyFixture(storage.directoryFor("next"))
+        val indexBefore = File(root, "boards.index").readBytes()
+
+        try { storage.openBoard("next") { error("save failed") }; fail("Expected save failure") }
+        catch (expected: IllegalStateException) { assertEquals("save failed", expected.message) }
+        try { storage.createBoard("New") { error("save failed") }; fail("Expected save failure") }
+        catch (expected: IllegalStateException) { assertEquals("save failed", expected.message) }
+
+        assertArrayEquals(indexBefore, File(root, "boards.index").readBytes())
+        assertFalse(storage.directoryFor("new-board").exists())
+        assertEquals(collection, storage.readCollection())
+    }
+
+    @Test fun boardsRetainIndependentStorageAndCapturedAsyncDestinationAfterSwitch() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ids = ArrayDeque(listOf("first", "second")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        val first = storage.createBoard("First")
+        val second = storage.createBoard("Second")
+        val firstDirectory = storage.directoryFor(first.activeBoardId!!)
+        val secondDirectory = storage.directoryFor(second.activeBoardId!!)
+        File(firstDirectory, "assets/asset-a").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(1, 2, 3)) }
+        File(secondDirectory, "assets/asset-a").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(4, 5, 6)) }
+        writeBoardFixture(firstDirectory, 1, 4)
+        writeBoardFixture(secondDirectory, 7, 10)
+
+        // An async save keeps its captured board directory after another board opens.
+        val capturedDestination = firstDirectory
+        storage.openBoard("second")
+        writeBoardFixture(capturedDestination, 13, 16)
+
+        val restarted = storageForManagement(root, legacy)
+        assertEquals("second", restarted.readCollection().activeBoardId)
+        assertArrayEquals(byteArrayOf(1, 2, 3), File(firstDirectory, "assets/asset-a").readBytes())
+        assertArrayEquals(byteArrayOf(4, 5, 6), File(secondDirectory, "assets/asset-a").readBytes())
+        assertEquals(CanvasViewport(CanvasPoint(13f, 14f), 15f), BoardStorage(firstDirectory).load().snapshot.fullScreen)
+        assertEquals(CanvasViewport(CanvasPoint(16f, 17f), 18f), BoardStorage(firstDirectory).load().snapshot.floating)
+        assertEquals(CanvasViewport(CanvasPoint(7f, 8f), 9f), BoardStorage(secondDirectory).load().snapshot.fullScreen)
+        assertEquals(CanvasViewport(CanvasPoint(10f, 11f), 12f), BoardStorage(secondDirectory).load().snapshot.floating)
+    }
+
     private fun newStorage(root: File, legacy: File) = BoardCollectionStorage(
         root, legacy, validateBoard = ::validateFixture, atomicReplace = ::atomicMove,
     )
+
+    private fun storageForManagement(
+        root: File,
+        legacy: File,
+        ids: ArrayDeque<String> = ArrayDeque(),
+    ) = BoardCollectionStorage(
+        root,
+        legacy,
+        validateBoard = ::validateFixture,
+        atomicReplace = ::atomicMove,
+        createEmptyBoard = ::writeEmptyFixture,
+        newBoardId = { ids.removeFirst() },
+    )
+
+    private fun writeEmptyFixture(directory: File) {
+        writeBoardFixture(directory, 0, 0)
+    }
+
+    private fun writeBoardFixture(directory: File, fullScreenCenter: Int, floatingCenter: Int) {
+        directory.mkdirs()
+        File(directory, "board.json").writeText(
+            """{"schemaVersion":1,"viewports":{"fullScreen":{"centerX":$fullScreenCenter,"centerY":${fullScreenCenter + 1},"zoom":${fullScreenCenter + 2}},"floating":{"centerX":$floatingCenter,"centerY":${floatingCenter + 1},"zoom":${floatingCenter + 2}}},"items":[]}""",
+        )
+    }
 
     private fun validateFixture(directory: File) {
         BoardStorage(directory).load()
