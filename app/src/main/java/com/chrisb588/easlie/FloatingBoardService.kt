@@ -15,6 +15,8 @@ import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.os.ResultReceiver
 import android.provider.Settings
 import android.util.Log
@@ -24,6 +26,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityEvent
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -51,6 +54,16 @@ class FloatingBoardService : Service() {
     private var layoutParams: WindowManager.LayoutParams? = null
     private var foregroundStarted = false
     private var composeOwner: OverlayComposeOwner? = null
+    private val controlsHandler = Handler(Looper.getMainLooper())
+    private var hideControls: Runnable? = null
+    private var accessibilityFocusInside = false
+    private var returnAfterStop = false
+    private var shouldMarkHintSeen = false
+
+    override fun onCreate() {
+        super.onCreate()
+        isServiceRunning = true
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -62,12 +75,7 @@ class FloatingBoardService : Service() {
             }
 
             ACTION_RETURN_TO_APP -> {
-                stopAndCleanUp()
-                startActivity(
-                    Intent(this, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }
-                )
+                returnToFullScreen()
                 START_NOT_STICKY
             }
 
@@ -85,6 +93,14 @@ class FloatingBoardService : Service() {
             foregroundStarted = false
         }
         super.onDestroy()
+        isServiceRunning = false
+        if (returnAfterStop) {
+            controlsHandler.post {
+                startActivity(Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                })
+            }
+        }
     }
 
     private fun startForegroundIfNeeded() {
@@ -165,6 +181,11 @@ class FloatingBoardService : Service() {
         try {
             val view = createBoardView(contextForWindow)
             manager.addView(view, params)
+            if (shouldMarkHintSeen) {
+                getSharedPreferences(PREFERENCES, MODE_PRIVATE)
+                    .edit().putBoolean(HINT_SEEN, true).apply()
+                shouldMarkHintSeen = false
+            }
             windowContext = contextForWindow
             windowManager = manager
             layoutParams = params
@@ -202,7 +223,24 @@ class FloatingBoardService : Service() {
     }
 
     private fun createBoardView(context: Context): View {
-        val root = FrameLayout(context).apply {
+        val root = object : FrameLayout(context) {
+            override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) showControls()
+                return super.dispatchTouchEvent(event)
+            }
+
+            override fun requestSendAccessibilityEvent(child: View, event: AccessibilityEvent): Boolean {
+                if (event.eventType == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED) {
+                    accessibilityFocusInside = true
+                    showControls()
+                }
+                if (event.eventType == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED) {
+                    accessibilityFocusInside = false
+                    scheduleControlsHide()
+                }
+                return super.requestSendAccessibilityEvent(child, event)
+            }
+        }.apply {
             contentDescription = getString(R.string.floating_board_overlay_label)
             background = GradientDrawable().apply {
                 setColor(Color.rgb(35, 36, 40))
@@ -314,6 +352,23 @@ class FloatingBoardService : Service() {
         addMoveListener(header)
         addResizeListener(resizeHandle)
         addResizeListener(leftResizeHandle, fromLeft = true)
+        val hint = TextView(context).apply {
+            text = getString(R.string.floating_board_first_run_hint)
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(74, 76, 84))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setOnClickListener { visibility = View.GONE }
+        }
+        val preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
+        if (!preferences.getBoolean(HINT_SEEN, false)) {
+            shouldMarkHintSeen = true
+            root.addView(hint, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            ))
+        }
+        controlViews = listOf(header, controls, resizeHandle, leftResizeHandle)
+        showControls()
         owner.start()
         return root
     }
@@ -471,12 +526,8 @@ class FloatingBoardService : Service() {
     }
 
     private fun returnToFullScreen() {
+        returnAfterStop = true
         stopAndCleanUp()
-        startActivity(
-            Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            }
-        )
     }
 
     private fun stopAndCleanUp() {
@@ -489,6 +540,11 @@ class FloatingBoardService : Service() {
     }
 
     private fun removeBoardWindow() {
+        hideControls?.let(controlsHandler::removeCallbacks)
+        hideControls = null
+        accessibilityFocusInside = false
+        shouldMarkHintSeen = false
+        controlViews = emptyList()
         val view = boardView ?: return
         try {
             windowManager?.removeViewImmediate(view)
@@ -534,10 +590,13 @@ class FloatingBoardService : Service() {
     }
 
     private fun createNotification(): Notification {
-        val returnIntent = PendingIntent.getService(
+        val returnIntent = PendingIntent.getActivity(
             this,
             RETURN_REQUEST_CODE,
-            controlIntent(ACTION_RETURN_TO_APP),
+            Intent(this, MainActivity::class.java).apply {
+                action = ACTION_RETURN_TO_APP
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val stopIntent = PendingIntent.getService(
@@ -582,8 +641,37 @@ class FloatingBoardService : Service() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).roundToInt()
 
+    private var controlViews: List<View> = emptyList()
+
+    private fun showControls() {
+        controlViews.forEach {
+            it.visibility = View.VISIBLE
+            it.alpha = 1f
+        }
+        scheduleControlsHide()
+    }
+
+    private fun scheduleControlsHide() {
+        hideControls?.let(controlsHandler::removeCallbacks)
+        val task = Runnable {
+            val root = boardView
+            if (accessibilityFocusInside || root?.findFocus() != null) {
+                scheduleControlsHide()
+            } else {
+                // The move bar keeps a large transparent target so a user can
+                // reveal the controls without finding a tiny handle.
+                controlViews.firstOrNull()?.alpha = 0.01f
+                controlViews.drop(1).forEach { it.visibility = View.INVISIBLE }
+            }
+        }
+        hideControls = task
+        controlsHandler.postDelayed(task, CONTROLS_TIMEOUT_MS)
+    }
+
     companion object {
         @Volatile var isBoardAttached = false
+            private set
+        @Volatile var isServiceRunning = false
             private set
         private const val TAG = "FloatingBoardService"
         private const val NOTIFICATION_CHANNEL_ID = "floating_board"
@@ -596,6 +684,9 @@ class FloatingBoardService : Service() {
         private const val DEFAULT_Y_DP = 72
         private const val MIN_WIDTH_DP = 280
         private const val MIN_HEIGHT_DP = 200
+        private const val CONTROLS_TIMEOUT_MS = 4000L
+        private const val PREFERENCES = "floating_board"
+        private const val HINT_SEEN = "controls_hint_seen"
 
         const val ACTION_START = "com.chrisb588.easlie.action.START_FLOATING_BOARD"
         const val ACTION_RETURN_TO_APP = "com.chrisb588.easlie.action.RETURN_TO_APP"

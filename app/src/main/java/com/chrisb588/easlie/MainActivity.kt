@@ -69,11 +69,30 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.action == FloatingBoardService.ACTION_RETURN_TO_APP) {
+            stopService(FloatingBoardService.startIntent(this))
+            waitForFloatingBoardToClose { showBoard(savedInstanceState) }
+            return
+        }
         if (FloatingBoardService.isBoardAttached) {
             if (savedInstanceState == null) receiveImages(intent)
             finish()
             return
         }
+        showBoard(savedInstanceState)
+    }
+
+    private fun waitForFloatingBoardToClose(ready: () -> Unit) {
+        if (!FloatingBoardService.isServiceRunning && !FloatingBoardService.isBoardAttached) {
+            ready()
+        } else {
+            window.decorView.postDelayed({
+                if (!isFinishing && !isDestroyed) waitForFloatingBoardToClose(ready)
+            }, 50)
+        }
+    }
+
+    private fun showBoard(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         refreshOverlayPermission()
         if (savedInstanceState == null) receiveImages(intent)
@@ -100,6 +119,10 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.action == FloatingBoardService.ACTION_RETURN_TO_APP) {
+            stopService(FloatingBoardService.startIntent(this))
+            return
+        }
         receiveImages(intent)
     }
 
