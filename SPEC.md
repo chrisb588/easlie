@@ -327,6 +327,45 @@ v0.1 is complete when all of the following work on the target Android tablet:
 - App-owned image copies make persistence reliable but duplicate source storage. Storage management can be
   revisited after the prototype proves the interaction and performance model.
 
+### Image-detail validation note — 2026-10-02
+
+On build `299f542`, the lead reported that a high-resolution photo looked slightly softer in easlie than
+in Samsung Gallery on the Samsung SM-X616B. The detail remained usable and zoom gestures stayed
+responsive. The comparison screenshots used different crops and displayed subject sizes, so they do
+not establish a matched-scale sharpness comparison. Automatic resolution upgrading for that image
+remains unverified by this visual comparison. [UNVERIFIED] The lead subsequently confirmed all manual
+acceptance criteria for issue #11, including board manipulation and zoom.
+
+The contributor considers slight softness acceptable for the prototype when reference detail remains
+usable and gestures stay responsive, subject to the lead's final acceptance decision. [OPINION]
+
+### Final performance and lifecycle record — issue #11
+
+The physical-tablet profiling used a 30-JPEG board, including five 16.4–30.1 MP photos, on the
+Samsung SM-X616B running Android 16. Three sustained pan, zoom, import, and floating-resize cycles
+completed without observed out-of-memory failures, completed-decode failures, or usable frames above
+700 ms. Peak sampled PSS was 302.30 MiB. Frames above 16.67 ms numbered 27/20,409 during pan,
+130/23,644 during zoom, and 1,589/22,217 during floating resizing. The longest completed decode was
+237 ms. The measured policy retains a 32 MiB image cache on this tablet. Independent 16/32/64 MiB
+cache comparisons recorded refresh-observation hit ratios of 75.01%/66.93%/55.65%; these use different
+requested resolution tiers and are not comparisons of identical cache keys.
+
+After activity and renderer release, diagnostic cache occupancy reached zero and idle PSS fell to
+119.55 MiB. An earlier floating lifecycle capture found no remaining easlie service or window after
+teardown. These finite measurements do not prove the absence of every possible leak. Detailed methods,
+build identities, limitations, and anonymized measurements are recorded in
+[the performance report](docs/image-performance-results.md),
+[the earlier lifecycle baseline](docs/image-performance-baseline.md), and their linked JSON summaries.
+These measurements preceded the final manual run; they are not new measurements of build `299f542`.
+
+For the final manual run on build `299f542`, the lead confirmed all issue #11 manual criteria. This
+includes shared-board edits and independent viewports across mode changes, force-stop/relaunch and
+tablet reboot, repeated Return and Close cycles, notification Return and Stop actions, and permission
+denial followed by approval. The manual checklist records at least five Return cycles and five Close
+cycles with edits preserved and no visible stale floating window or ongoing notification. These are
+lead-reported observations, not additional service diagnostics or memory measurements. Image detail
+remained usable with responsive gestures; the slight-softness observation is recorded above.
+
 ## Technical references
 
 - [Android photo picker and persistent media access](https://developer.android.com/training/data-storage/shared/photo-picker)
