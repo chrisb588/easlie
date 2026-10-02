@@ -46,6 +46,7 @@ import com.chrisb588.easlie.images.intersects
 
 object CanvasTestTags {
     const val FullScreenBoard = "full-screen-board"
+    const val FloatingBoard = "floating-board"
 }
 
 private enum class DragKind { Pan, Move, Resize, Rotate, Blocked }
@@ -53,17 +54,27 @@ private data class Handle(val xSign: Float, val ySign: Float)
 private val corners = listOf(Handle(-1f, -1f), Handle(1f, -1f), Handle(1f, 1f), Handle(-1f, 1f))
 
 @Composable
-fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
+fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingMode: Boolean = false) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var menuId by remember { mutableStateOf<String?>(null) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current.density
-    LaunchedEffect(board, density) {
-        snapshotFlow { Triple(board.items, board.viewport, board.windowSize) }.collect {
-            board.refreshImages(density)
+    val imageOwner = remember(board) { Any() }
+    var canvasSize by remember { mutableStateOf(CanvasSize(0f, 0f)) }
+    DisposableEffect(board, imageOwner) {
+        board.attachCanvas(imageOwner)
+        onDispose { board.save(); board.detachCanvas(imageOwner) }
+    }
+    LaunchedEffect(board, density, floatingMode, imageOwner) {
+        snapshotFlow {
+            if (board.isActiveCanvas(imageOwner)) Triple(board.items, board.viewportFor(floatingMode), canvasSize)
+            else null
+        }.collect { state ->
+            if (state != null && state.third.width > 0f && state.third.height > 0f) {
+                board.refreshImages(imageOwner, density, floatingMode, state.third)
+            }
         }
     }
-    DisposableEffect(board) { onDispose { board.save(); board.releaseImages() } }
     val handleRadius = with(LocalDensity.current) { 12.dp.toPx() }
     val rotationGap = with(LocalDensity.current) { 36.dp.toPx() }
     val backgroundColor = MaterialTheme.colorScheme.background
@@ -72,8 +83,8 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize()) {
         Canvas(
             Modifier.fillMaxSize().clipToBounds().background(backgroundColor)
-                .onSizeChanged { board.resizeWindow(CanvasSize(it.width.toFloat(), it.height.toFloat())) }
-                .testTag(CanvasTestTags.FullScreenBoard)
+                .onSizeChanged { canvasSize = CanvasSize(it.width.toFloat(), it.height.toFloat()) }
+                .testTag(if (floatingMode) CanvasTestTags.FloatingBoard else CanvasTestTags.FullScreenBoard)
                 .semantics { contentDescription = "Reference image board. Tap to select; drag a selected image or its handles. Double-tap for Delete." }
                 .pointerInput(board, handleRadius, rotationGap) {
                     var lastTapTime = 0L
@@ -84,8 +95,8 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
                         try {
                             menuId = null
                             val start = down.position.toCanvasPoint()
-                            val viewportAtStart = board.viewport
-                            val size = board.windowSize
+                            val viewportAtStart = board.viewportFor(floatingMode)
+                            val size = canvasSize
                             val worldStart = viewportAtStart.windowToWorld(start, size)
                             val selected = board.items.firstOrNull { it.id == selectedId }
                             val hit = board.items.hitTest(worldStart)
@@ -134,7 +145,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
                                     if (focal != Offset.Unspecified) {
                                         board.transformViewport(
                                             focal.toCanvasPoint(), event.calculatePan().toCanvasPoint(),
-                                            event.calculateZoom(), board.windowSize,
+                                            event.calculateZoom(), canvasSize, floatingMode,
                                         )
                                     }
                                     event.changes.forEach { if (it.pressed) it.consume() }
@@ -148,7 +159,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
                                     }
                                     if (dragged) {
                                         when (kind) {
-                                            DragKind.Pan -> board.viewport = viewportAtStart.pannedBy(totalDelta.toCanvasPoint())
+                                            DragKind.Pan -> board.setViewport(viewportAtStart.pannedBy(totalDelta.toCanvasPoint()), floatingMode)
                                             DragKind.Move -> initialItem?.let {
                                                 board.update(it.copy(center = it.center + totalDelta.toCanvasPoint() / viewportAtStart.zoom))
                                             }
@@ -190,7 +201,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier) {
                     }
                 },
         ) {
-            val viewport = board.viewport
+            val viewport = board.viewportFor(floatingMode)
             val size = CanvasSize(this.size.width, this.size.height)
             for (item in board.items.inStackingOrder()) {
                 if (!item.intersects(viewport, size, 24f * density)) continue

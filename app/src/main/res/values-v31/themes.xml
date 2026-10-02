@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Easlie" parent="Base.Theme.Easlie">
+        <item name="android:windowSplashScreenBackground">@color/window_background</item>
+    </style>
+</resources>

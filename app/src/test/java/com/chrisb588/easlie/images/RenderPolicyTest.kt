@@ -32,6 +32,19 @@ class RenderPolicyTest {
         assertFalse(item.copy(center = CanvasPoint(1000f, 0f)).intersects(viewport, size, 24f))
     }
 
+    @Test fun deferredAdmissionKeepsVisibleImagesUntilSpaceIsFreed() {
+        val cache = ByteImageCache<String, Int>(100) { it.toLong() }
+        cache.put("unchanged", 20)
+        cache.put("downsizing", 70)
+        cache.protectedKeys = setOf("unchanged", "downsizing", "new")
+        assertFalse(cache.put("new", 20, allowProtectedEviction = false))
+        assertEquals(setOf("unchanged", "downsizing"), cache.snapshot().keys)
+        assertTrue(cache.put("downsizing", 20, allowProtectedEviction = false))
+        assertTrue(cache.put("new", 20, allowProtectedEviction = false))
+        assertEquals(setOf("unchanged", "downsizing", "new"), cache.snapshot().keys)
+        assertTrue(cache.sizeBytes <= cache.budget)
+    }
+
     @Test fun cacheUsesBytesAccessOrderAndVisiblePriority() {
         val cache = ByteImageCache<String, Int>(10) { it.toLong() }
         cache.put("visible", 4)
