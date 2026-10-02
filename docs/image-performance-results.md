@@ -4,6 +4,20 @@ This report supersedes the [preliminary small-source baseline](image-performance
 
 The large sources are 6000 × 4000, 5400 × 3038, 4480 × 6720, 6720 × 4480, and 6048 × 4024 pixels. They contain approximately 16.4 to 30.1 million pixels each. The remaining 25 sources have longest edges from 600 to 1594 pixels. The [anonymized inventory](profiling/2026-10-02/high-resolution-inventory.json) contains dimensions, formats, and encoded sizes, without filenames, asset IDs, or image content. This is a JPEG workload; it does not establish performance for every supported format.
 
+## Plain-language findings and implications
+
+The supplied 30-image board completed three sustained test cycles without running out of memory. This included five large photos, repeated panning and zooming, importing additional images, and resizing the floating window. Peak sampled memory was 302.30 MiB, approximately 317 MB in decimal units. This establishes that this board completed the tested workload on the target tablet. It does not establish the maximum number of images easlie supports.
+
+Floating-window resizing is the main remaining measured performance concern. About 7% of measured screen updates during resizing exceeded the 16.67-millisecond comparison benchmark, versus 0.13% during panning and 0.55% during zooming. The worst resizing update took about 54 milliseconds. No captured update exceeded the 700-millisecond frozen-frame threshold described in [Android's rendering guidance](https://developer.android.com/google/play/vitals/render). Shorter delays can still cause stuttering. Whether those delays feel disruptive during normal use remains a manual review question.
+
+Giving the app more image memory did not automatically make image preparation faster. The 16 MiB allowance used less memory but selected less detailed image copies more often. The 64 MiB allowance permitted more detail but increased memory use and completed image-preparation time. The branch retains 32 MiB on this tablet. Treating that as a reasonable middle choice for this board, subject to the lead's sharpness check, is a recommendation rather than proof of an optimal setting. [OPINION] These comparisons did not measure whether a larger allowance makes actual floating resizing smoother.
+
+The app released substantial memory after leaving the board. Its image cache emptied, and sampled memory fell to 119.55 MiB after idle, approximately 125 MB in decimal units. That is evidence that cleanup worked during these tests. It does not prove that longer sessions are free of every memory leak.
+
+Profiling uncovered a crash when the app stopped several pending image-loading tasks together. The implementation now fixes that crash. A targeted test reproduced it before the fix and passed afterward. During the follow-up trace, all 769 completed image-preparation operations ran on background workers, separate from the main work handling the interface. This finding applies to the captured interval and excludes incomplete operations.
+
+The recommended next focus is how floating resizing feels while another drawing app is running, together with whether images remain sharp enough while zooming. [OPINION] That shared workload was not measured here. Increasing the image-memory allowance alone has no demonstrated benefit for fixing the resizing delays. Other tablets, larger persistent boards, different image formats, portrait layouts, and longer sessions need separate evidence before making broader performance claims.
+
 ## Device and build
 
 Measurements use the physical Samsung SM-X616B tablet running Android 16. Its physical display is 1600 × 2560 pixels at 340 dpi. Android reports a 256 MiB app memory class. Kernel-reported usable RAM is 7,613,916 KiB (7.26 GiB). The existing production memory-class/8 policy gives a 32 MiB decoded-image cache on this tablet.
