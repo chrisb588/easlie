@@ -1,0 +1,39 @@
+{
+  "seconds": 120,
+  "repetitions": 3,
+  "interval_seconds": 0.5,
+  "floating_requested": true,
+  "floating_only": false,
+  "cache_only": false,
+  "hosts_only": true,
+  "cache_divisor": null,
+  "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+  "dirty": true,
+  "apk_sha256": {
+    "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+    "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+  },
+  "device_model": "SM-X616B",
+  "android_version": "16",
+  "physical_display_px": [
+    1600,
+    2560
+  ],
+  "density_dpi": 340,
+  "memory_class_MiB": 256,
+  "kernel_usable_RAM_KiB": 7613916,
+  "clock_uncertainty_seconds": 0.03187978267669678,
+  "restoration": {
+    "manifest_equal": true,
+    "asset_bytes_equal": true,
+    "file_list_equal": true
+  },
+  "thermal_endpoints": {
+    "status_before": 0,
+    "status_after": 0,
+    "AP_C_before": 30.9,
+    "AP_C_after": 39.4,
+    "skin_C_before": 30.3,
+    "skin_C_after": 36.9
+  }
+}

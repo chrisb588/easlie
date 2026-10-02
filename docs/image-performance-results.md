@@ -1,0 +1,73 @@
+# High-resolution reference-board profiling
+
+This report supersedes the [preliminary small-source baseline](image-performance-baseline.md) for issue #8. The supplied board contains 30 real JPEG references. Five original-resolution photos replace five of the earlier small images. The source set totals 34,113,907 encoded bytes (32.53 MiB).
+
+The large sources are 6000 × 4000, 5400 × 3038, 4480 × 6720, 6720 × 4480, and 6048 × 4024 pixels. They contain approximately 16.4 to 30.1 million pixels each. The remaining 25 sources have longest edges from 600 to 1594 pixels. The [anonymized inventory](profiling/2026-10-02/high-resolution-inventory.json) contains dimensions, formats, and encoded sizes, without filenames, asset IDs, or image content. This is a JPEG workload; it does not establish performance for every supported format.
+
+## Device and build
+
+Measurements use the physical Samsung SM-X616B tablet running Android 16. Its physical display is 1600 × 2560 pixels at 340 dpi. Android reports a 256 MiB app memory class. Kernel-reported usable RAM is 7,613,916 KiB (7.26 GiB). The existing production memory-class/8 policy gives a 32 MiB decoded-image cache on this tablet.
+
+The branch is rebased onto main at `fd436b2`, preserving its canvas ownership, downsizes-first decode order, and protected-cache admission fixes. The capture uses the debug build with this continuation's diagnostics, cancellation fix, and opt-in instrumentation. [Build metadata](profiling/2026-10-02/high-resolution-metadata.json) records the parent commit, dirty-source status during capture, and exact APK SHA-256 values. Before and after the sustained capture, Android reported thermal status 0. AP temperature rose from 30.9 to 39.4 degrees Celsius and skin temperature from 30.3 to 36.9. These endpoint readings do not establish thermal state at every intermediate moment. No debugger or Android Studio profiler is attached. Debug logging, developer options, and instrumentation are enabled.
+
+## Workload and measurement limits
+
+The sustained host capture runs three cycles in one fresh app process. Each cycle pans for 120 seconds, focuses and repeatedly zooms through all 30 images for 120 seconds, imports three temporary real-source copies through the normal importer, and resizes the actual floating window while changing its viewport for 120 seconds. Import rounds cycle through all five largest photos. The board briefly grows from 30 to 33 items before the new items are removed. Each floating round returns to the full-screen activity. Normal teardown restores all original items and both saved viewports.
+
+Separate renderer-only comparisons use three fresh processes per cache budget, with 16, 32, and 64 MiB budgets. Budget order varies between passes. Each 120-second pass pans for one second and focuses its next image for three seconds in each four-second block, largest sources first. Every image receives detail focus. The fixed renderer viewport is 2560 × 1444 pixels. These comparisons draw no frames and measure neither GPU upload cost nor visual quality. File caches are warm. Their PSS values must not be compared directly with drawn-host PSS.
+
+Memory and `gfxinfo` are sampled every 0.5 seconds. Peak PSS is the largest observed sample, not an exact allocation peak. Completed zero-flag frame rows are deduplicated by window and intended-vsync timestamp. Bounded frame history and excluded flags can omit frames. Durations above 16.67 ms use a fixed 60 Hz comparison threshold; the tablet can run at 90 Hz. Frozen frames use a 700 ms threshold. Impossible completion timestamps beyond observation time are rejected and counted; a later valid observation of the same frame remains usable. This validity check does not remove real frozen frames.
+
+Completed decode times exclude queue wait and canceled jobs. The large-source subgroup uses a longest edge of at least 4000 pixels. Cache hit ratios count requested-tier observations on every refresh, including repeated misses while decoding is in flight. They are not unique-request hit rates. Cache occupancy is sampled from diagnostic snapshots. Programmatic canvas viewport changes bypass gesture recognition; floating resizing uses injected touch drags. The lead's manual gesture and image-quality checks remain part of PR review.
+
+The first requested 30-second Perfetto trace overlaps floating round three; its buffer retained only about eight seconds. A separate larger-buffer trace supplies the decode-thread check below. Report that round separately when assessing trace overhead. After the activity closes and renderer ownership clears, separate ten-second idle and ten-second explicit-GC diagnostics measure retained memory. The GC request happens outside interaction timing and does not guarantee every allocation is reclaimed.
+
+## Cancellation defect found during profiling
+
+The first capture after rebasing failed before its first timed workload. Canceling main-dispatcher decode jobs ran coroutine cleanup synchronously. Cleanup removed jobs while `ImageRenderer.clear()` iterated the live job map, causing `ConcurrentModificationException`.
+
+An isolated 30-image queued-decode regression reproduced that exception before the fix. `clear()` now snapshots the jobs, clears job ownership and requested demands, and then cancels the detached jobs. Synchronous cleanup cannot mutate the cancellation iteration or restart old requests. The regression passed after the fix, and all 11 isolated image-rendering, rendering-persistence, and canvas-handover tests passed on the physical tablet. An external comparison confirmed the original manifest, byte-for-byte equality of all 30 assets, and no extra board files after the failed capture.
+
+The later full-workload harness check initially could not locate the floating resize handle. The tablet was awake and overlay permission remained enabled. The harness was updated to observe interactive-window accessibility events before launching the activity. A short floating-only check and then a short three-cycle pan/zoom/import/floating check passed. Their timing results are automation checks, not the sustained qualification measurements. External comparison again confirmed the original board files.
+
+## Sustained host results
+
+All three sustained cycles completed. The [host summary](profiling/2026-10-02/high-resolution-host-summary.json) records each round separately. There were no OOMs, completed-decode failures, or observed frames above 700 ms. No impossible future completion rows were observed in this final capture.
+
+Pan produced 20,409 usable frame rows, with 27 above 16.67 ms (0.13%). Its highest sampled PSS was 197.13 MiB, and its worst observed frame was 21.86 ms. Zoom produced 23,644 rows, with 130 above 16.67 ms (0.55%). Its highest sampled PSS was 302.30 MiB, the overall host peak, and its worst frame was 31.45 ms. The three import batches produced only 34 usable rows, with three above 16.67 ms. That small frame count cannot establish a reliable import frame-time percentile across arbitrary workloads.
+
+Floating resizing produced 22,217 usable rows, with 1,589 above 16.67 ms (7.15%). Its highest sampled PSS was 285.38 MiB. Per-round p95 frame times were 18.70, 18.12, and 18.81 ms, with worst frames of 53.88, 52.19, and 44.51 ms. The third round includes the first trace capture. Resize handles reached actual window sizes of 561 × 195 and 2475 × 1117 pixels in every round. The activity canvas was 2458 × 722 pixels in this prototype's landscape layout. This qualifies these actual hosts and does not substitute for a full-display canvas measurement.
+
+Large-source completed-decode p95 was 146–149 ms during pan, approximately 152 ms during zoom, and 198–199 ms during floating resizing. The longest completed decode across the host rounds was 237 ms. These are background decode durations, not UI frame durations. Floating resizing remains the largest measured frame-time cost. The evidence does not identify a unique cause or show that adjusting cache size alone would remove it.
+
+Activity and renderer release reduced diagnostic cache occupancy to zero. After ten seconds of idle, the last PSS sample was 119.55 MiB, including 10,872 KiB Java heap, 19,364 KiB native heap, and 4,428 KiB graphics. After a separate explicit-GC diagnostic, PSS was 115.35 MiB, with 10,872 KiB Java heap, 18,812 KiB native heap, and 668 KiB graphics. Pan's last samples rose from 168.29 to 180.64 MiB across the three rounds, while floating's last samples stayed between 180.20 and 186.55 MiB. Release reclaimed substantial memory; these three cycles and sampled PSS do not prove absence of every leak.
+
+## Reconnection and source preservation
+
+A USB disconnect interrupted the seventh independent cache comparison. That incomplete capture is excluded from the comparison data. The completed host capture and six completed comparisons were preserved. After reconnection, the supplied board's manifest, file list, and all 30 encoded assets matched the external backup. The interrupted comparison was rerun from a fresh process before the remaining comparisons. Normal completed captures also verify the restored manifest and assets externally.
+
+## Measured cache and tier choice
+
+All nine independent renderer-only passes completed without OOM or completed-decode failure. The [cache comparison](profiling/2026-10-02/high-resolution-cache-comparison.json) contains each pass and its exact build metadata. The interrupted pass is excluded. Median sampled peak PSS across three passes was 131.93 MiB at 16 MiB, 154.86 MiB at 32 MiB, and 170.48 MiB at 64 MiB. Median completed-decode p95 was 85.1, 88.0, and 106.0 ms, respectively. Large-source completed-decode p95 medians were 145.0, 151.5, and 153.65 ms.
+
+The branch retains the memory-class/8 policy: 32 MiB on this tablet. The 16 MiB candidate reduced median sampled peak PSS by 22.93 MiB, but admitted coarser resolution tiers: median sample-1 completion count was 159, versus 360 at 32 MiB. The 64 MiB candidate raised median sampled peak PSS by 15.62 MiB over 32 MiB and raised completed-decode p95 to 106 ms, while allowing more sample-1 completions (median 532). Sample-1 completion counts describe the completed workload, not unique sharp images or a visual-quality score. The retained 32 MiB setting is a measured middle choice for this board, pending the lead's visual check; the comparison does not establish a universal optimum.
+
+Median refresh-observation hit ratios were 75.01%, 66.93%, and 55.65% for 16, 32, and 64 MiB. A larger budget changes requested resolution tiers, so these are not comparisons of identical cache keys or proof that the smallest budget is best. Median maximum observed occupancy was 10.09, 23.92, and 33.99 MiB, respectively. No measured snapshot exceeded its budget. Canceled jobs and completion timing also affect counts; lower completed-decode counts alone do not establish lower work or latency.
+
+Rendering retains power-of-two sampling based on visible pixels, with 7/8 of cache budget shared by visible images and 1/8 reserved for nearby images. It retains the 0.35 downgrade dead band, 1.2 growth requirement after a budget-limited tier, and one concurrent renderer decode. The large sources used sample factors 2–32 across the real host stages, so they were not routinely decoded at full original resolution. The trace checks whether completed decode slices run off the main thread. These measurements support keeping the existing tier policy for this workload. They do not compare alternative hysteresis constants or prove that the current constants are optimal.
+
+## Supported envelope and remaining review
+
+The measured envelope is this Android 16 tablet, this landscape prototype layout, and a 30-JPEG board totaling 32.53 MiB encoded, including five 16.4–30.1 MP photos. Three temporary imports increased the board to 33 items per round. Three sustained cycles completed with bounded cache occupancy and no observed OOM, decode failure, or frozen frame. Floating resizing has measurable slow frames, so this report does not claim every interaction consistently meets a 60 Hz or 90 Hz frame deadline.
+
+Boards above 30 persistent items, other tablets, full-display canvases, portrait layouts, and different format distributions remain unqualified. JPEG megapixel count alone does not predict allocation peaks for every format. The lead still needs to check real finger gestures, sharpness while zooming and resizing, perceived floating-window responsiveness, and the restored board during PR review. Automated viewport changes and trace slices cannot verify those visual acceptance points.
+
+Repository verification passed debug app and instrumentation builds, JVM unit tests, Android lint, the four Python capture-parser regressions, and the 11 isolated physical-device rendering/persistence/canvas-handover tests. The destructive board-interaction test class was not run against the supplied real board. The opt-in real-board profile completed the sustained host workload, nine independent cache comparisons, and separate trace diagnostics. Original image content and raw traces remain local; only anonymized summaries are published.
+
+## Floating trace findings
+
+The first trace used a 32 MiB ring buffer and overwrote 90,902,528 bytes, retaining only 8.008 seconds of app slice coverage. Its retained 183 completed decode slices were on worker threads. A separate 45-second floating-only diagnostic used a 192 MiB buffer for a requested 30-second trace. It retained 29.909 seconds of app slice coverage, with no reported overwritten bytes or error-severity trace statistics. The original board was verified externally after this diagnostic.
+
+The [anonymized trace summary](profiling/2026-10-02/high-resolution-trace-summary.json) records 769 completed decode slices, all on worker threads, with a maximum duration of 207.77 ms. No completed decode slice appeared on the main thread. This is evidence for this captured interval; canceled or incomplete slices are excluded.
+
+FrameTimeline reported 1,775 app surface frames. Its largest groups were 874 late presentations classified as Buffer Stuffing and 422 classified as App Deadline Missed. There were also combined classifications and SurfaceFlinger classifications. The separate trace diagnostic has instrumentation and substantial tracing overhead. Its presentation counts cannot be substituted for the sustained capture's gfxinfo measurements or treated as proof of a unique bottleneck. They show that remaining resize cost includes frame production and presentation; background decoding alone does not ensure every frame deadline is met.

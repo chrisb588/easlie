@@ -48,12 +48,19 @@ class RealBoardProfileTest {
         val repetitions = (args.getString("profileRepetitions") ?: "3").toInt().also { require(it in 1..10) }
         val profileFloating = args.getString("profileFloating") != "false"
         val floatingOnly = args.getString("profileFloatingOnly") == "true"
+        val cacheOnly = args.getString("profileCacheOnly") == "true"
+        val hostsOnly = args.getString("profileHostsOnly") == "true"
+        val cacheDivisor = args.getString("profileCacheDivisor")?.toInt()?.also { require(it in listOf(16, 8, 4)) }
+        require(!cacheOnly || !floatingOnly)
+        require(!cacheOnly || !hostsOnly)
         require(!floatingOnly || profileFloating)
-        check(!profileFloating || Settings.canDrawOverlays(context)) { "Grant floating-board permission in the app before profiling" }
+        check(cacheOnly || !profileFloating || Settings.canDrawOverlays(context)) { "Grant floating-board permission in the app before profiling" }
+        if (profileFloating && !cacheOnly) configureFloatingAutomation()
         val storage = BoardStorage(File(context.filesDir, "board"))
         val original = storage.load().snapshot
         require(original.items.size in 20..30) { "Supply 20 to 30 real images on the board first" }
         val sources = original.items.associate { it.id to readImageSource(storage.asset(it.assetId)) }
+        val importItems = original.items.sortedByDescending { sources.getValue(it.id).edge }.take(5)
         val memoryClass = (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).memoryClass
         Log.i(TAG, "device=${android.os.Build.MODEL} android=${android.os.Build.VERSION.RELEASE} memory_class_mb=$memoryClass seconds=$seconds repetitions=$repetitions")
         original.items.forEachIndexed { index, item ->
@@ -96,9 +103,12 @@ class RealBoardProfileTest {
         fun viewport(t: Float) = CanvasViewport(
             CanvasPoint(left + (right - left) * (sin(t * 0.7f) + 1f) / 2f, centerY), 0.8f)
         try {
-            launch()
-            await { board.items.size == original.items.size && board.images.isNotEmpty() }
-            for (repeat in 1..repetitions) {
+            if (cacheOnly) await { board.items.size == original.items.size }
+            else {
+                launch()
+                await { board.items.size == original.items.size && board.images.isNotEmpty() }
+            }
+            if (!cacheOnly) for (repeat in 1..repetitions) {
                 onMain { board.releaseImages(); board.viewport = original.fullScreen }
                 Thread.sleep(1000)
                 if (!floatingOnly) {
@@ -116,7 +126,7 @@ class RealBoardProfileTest {
                             val uri = Uri.parse("content://com.chrisb588.easlie.test.images/profile-$repeat-$index.jpg")
                             fixtureUris.add(uri)
                             context.contentResolver.openOutputStream(uri)!!.use { output ->
-                                sources.getValue(original.items[(repeat * 3 + index) % original.items.size].id).file.inputStream().use { it.copyTo(output) }
+                                sources.getValue(importItems[((repeat - 1) * 3 + index) % importItems.size].id).file.inputStream().use { it.copyTo(output) }
                             }
                             uri
                         }
@@ -165,15 +175,27 @@ class RealBoardProfileTest {
             // This experiment does not draw frames and is reported separately from the real hosts above.
             scenario?.close(); scenario = null
             onMain { board.releaseImages() }
-            if (!floatingOnly) for (divisor in listOf(16, 8, 4)) {
+            if (!cacheOnly) {
+                stage("released-idle", 0) { Thread.sleep(10000) }
+                stage("released-gc", 0) {
+                    // Separate diagnostic, outside interaction timing: distinguish
+                    // collectible allocations from live renderer/cache ownership.
+                    Runtime.getRuntime().gc()
+                    Thread.sleep(10000)
+                }
+            }
+            // Every four-second block pans for one second and focuses its image for three.
+            // Largest sources go first; a 120-second pass focuses all 30 images.
+            val cacheItems = original.items.sortedByDescending { sources.getValue(it.id).edge }
+            if (!floatingOnly && !hostsOnly) for (divisor in cacheDivisor?.let { listOf(it) } ?: listOf(16, 8, 4)) {
                 for (repeat in 1..repetitions) {
                     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
                     val renderer = ImageRenderer(scope, memoryClass.toLong() * 1024 * 1024 / divisor, true)
                     try {
                         stage("cache-$divisor", repeat, snapshot = { renderer.logProfile() }) {
                             animate { t ->
-                                val item = original.items[(t / 3).toInt() % original.items.size]
-                                val view = if (t.toInt() % 6 < 3) viewport(t) else CanvasViewport(item.center, 0.3f + (sin(t * 1.6f) + 1f) * 4f)
+                                val item = cacheItems[(t / 4).toInt() % cacheItems.size]
+                                val view = if (t % 4 < 1) viewport(t) else CanvasViewport(item.center, 0.3f + (sin(t * 1.6f) + 1f) * 4f)
                                 renderer.refresh(original.items, sources, view, CanvasSize(2560f, 1444f), context.resources.displayMetrics.density)
                             }
                             Thread.sleep(1000)
@@ -191,6 +213,9 @@ class RealBoardProfileTest {
                 await { !FloatingBoardService.isServiceRunning }
             } finally {
                 try {
+                    // A timed-out import belongs to the application scope and can
+                    // still commit items. Never claim restoration before it settles.
+                    await { !board.importing }
                     onMain {
                         board.items.filter { item -> original.items.none { it.id == item.id } }.forEach { board.delete(it.id) }
                         original.items.forEach(board::update)
@@ -208,6 +233,14 @@ class RealBoardProfileTest {
         }
     }
 
+    private fun configureFloatingAutomation() {
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            eventTypes = android.view.accessibility.AccessibilityEvent.TYPES_ALL_MASK
+        }
+    }
+
     private fun resizeHandleBounds(): Rect {
         fun find(node: AccessibilityNodeInfo?): Rect? {
             if (node == null) return null
@@ -218,13 +251,22 @@ class RealBoardProfileTest {
             return null
         }
         val automation = instrumentation.uiAutomation
-        automation.serviceInfo = automation.serviceInfo.apply {
-            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-        }
         val deadline = SystemClock.uptimeMillis() + 5000
         while (SystemClock.uptimeMillis() < deadline) {
             automation.windows.forEach { find(it.root)?.let { bounds -> if (!bounds.isEmpty) return bounds } }
             Thread.sleep(50)
+        }
+        Log.i(TAG, "floating_detection_failed service_running=${FloatingBoardService.isServiceRunning} attached=${FloatingBoardService.isBoardAttached} accessibility_flags=${automation.serviceInfo.flags} windows=${automation.windows.size}")
+        automation.windows.forEach { window ->
+            val root = window.root
+            Log.i(TAG, "accessibility_window type=${window.type} root_present=${root != null} app_root=${root?.packageName == context.packageName}")
+            fun describe(node: AccessibilityNodeInfo?) {
+                if (node == null || node.packageName != context.packageName) return
+                val bounds = Rect().also(node::getBoundsInScreen)
+                Log.i(TAG, "app_node class=${node.className} description=${node.contentDescription} visible=${node.isVisibleToUser} bounds=$bounds")
+                for (index in 0 until node.childCount) describe(node.getChild(index))
+            }
+            describe(root)
         }
         error("Floating resize handle is unavailable")
     }

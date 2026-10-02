@@ -1,5 +1,7 @@
 # Supplied-board profiling baseline
 
+The later [high-resolution profiling report](image-performance-results.md) supersedes this preliminary source set. The results below remain historical evidence for the original small-image board.
+
 This is a preliminary measurement for issue #8, not a completed performance validation or a production tuning decision. The supplied board has 30 real JPEGs, but no high-resolution photos. The longest source edges range from 600 to 1594 pixels. The source files total 3,505,118 bytes (3.34 MiB). SPEC.md also requires several high-resolution photos, so the current set does not cover the complete workload.
 
 ## Device and build

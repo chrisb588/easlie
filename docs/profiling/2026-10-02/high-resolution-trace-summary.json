@@ -1,0 +1,74 @@
+{
+  "requested_duration_seconds": 30,
+  "buffer_MiB": 192,
+  "retained_app_slice_span_seconds": 29.909,
+  "overwritten_bytes": 0,
+  "error_stats": [],
+  "completed_decode_slices": 769,
+  "main_thread_completed_decode_slices": 0,
+  "maximum_completed_decode_slice_ms": 207.774,
+  "diagnostic_workload_seconds": 45,
+  "limitations": "Separate floating-only diagnostic with tracing overhead, not a repeat of sustained host qualification. Completed slices omit canceled/incomplete slices; trace does not prove every past or future decode stays off main. FrameTimeline categories describe observed presentation, not unique root causes.",
+  "frame_timeline_counts": [
+    {
+      "jank_type": "Buffer Stuffing",
+      "on_time_finish": true,
+      "present_type": "Late Present",
+      "count": 874
+    },
+    {
+      "jank_type": "App Deadline Missed",
+      "on_time_finish": false,
+      "present_type": "Late Present",
+      "count": 422
+    },
+    {
+      "jank_type": "None",
+      "on_time_finish": true,
+      "present_type": "On-time Present",
+      "count": 378
+    },
+    {
+      "jank_type": "None",
+      "on_time_finish": false,
+      "present_type": "On-time Present",
+      "count": 35
+    },
+    {
+      "jank_type": "App Deadline Missed, Buffer Stuffing",
+      "on_time_finish": false,
+      "present_type": "Late Present",
+      "count": 21
+    },
+    {
+      "jank_type": "Buffer Stuffing, SurfaceFlinger Stuffing",
+      "on_time_finish": true,
+      "present_type": "Late Present",
+      "count": 18
+    },
+    {
+      "jank_type": "App Deadline Missed, SurfaceFlinger Stuffing",
+      "on_time_finish": false,
+      "present_type": "Late Present",
+      "count": 16
+    },
+    {
+      "jank_type": "SurfaceFlinger Stuffing",
+      "on_time_finish": true,
+      "present_type": "Late Present",
+      "count": 8
+    },
+    {
+      "jank_type": "SurfaceFlinger GPU Deadline Missed, App Deadline Missed",
+      "on_time_finish": false,
+      "present_type": "Late Present",
+      "count": 2
+    },
+    {
+      "jank_type": "SurfaceFlinger GPU Deadline Missed, Buffer Stuffing",
+      "on_time_finish": true,
+      "present_type": "Late Present",
+      "count": 1
+    }
+  ]
+}

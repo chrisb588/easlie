@@ -2,6 +2,7 @@ package com.chrisb588.easlie.images
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.os.Trace
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,9 +70,12 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, pr
             if (id !in requested) cache.remove(id)
         }
         publish()
-        if (profile) demands.forEach { demand ->
-            if (cache[demand.id]?.sample == demand.sample) profileCounters.recordHit()
-            else profileCounters.recordMiss()
+        if (profile) {
+            val observed = cache.snapshot()
+            demands.forEach { demand ->
+                if (observed[demand.id]?.sample == demand.sample) profileCounters.recordHit()
+                else profileCounters.recordMiss()
+            }
         }
         startDecodes(sources)
         if (profile && ++refreshes % 100L == 0L) {
@@ -100,15 +104,19 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, pr
                     // Queue on the main dispatcher so IO scheduling cannot reorder downsizes.
                     val bitmap = decoder.withPermit {
                         withContext(Dispatchers.IO) {
-                            val start = SystemClock.elapsedRealtimeNanos()
-                            source.decode(demand.sample).also {
-                                decoded = it
-                                decodeMillis = (SystemClock.elapsedRealtimeNanos() - start) / 1_000_000
+                            val start = if (profile) SystemClock.elapsedRealtimeNanos() else 0L
+                            if (profile) Trace.beginSection("easlie.decode sample=${demand.sample} source_edge=${source.edge}")
+                            try {
+                                source.decode(demand.sample).also {
+                                    decoded = it
+                                    if (profile) decodeMillis = (SystemClock.elapsedRealtimeNanos() - start) / 1_000_000
+                                }
+                            } finally {
+                                if (profile) Trace.endSection()
                             }
                         }
-
                     }
-                    if (profile) Log.d("EaslieImageProfile", "decode_ms=$decodeMillis sample=${demand.sample} bytes=${bitmap.allocationByteCount}")
+                    if (profile) Log.d("EaslieImageProfile", "decode_ms=$decodeMillis sample=${demand.sample} bytes=${bitmap.allocationByteCount} source_edge=${source.edge}")
                     if (requested[demand.id]?.sample == demand.sample) {
                         admitted = cache.put(demand.id, CachedImage(demand.sample, bitmap, bitmap.asImageBitmap()),
                             allowProtectedEviction = false)
@@ -132,7 +140,6 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, pr
             }
             jobs[demand.id] = demand.sample to job
         }
-
     }
 
     /** Capture short workloads too; periodic logging alone can miss their final counters. */
@@ -148,9 +155,12 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, pr
     }
 
     fun clear() {
-        jobs.values.forEach { it.second.cancel() }
+        val pending = jobs.values.map { it.second }
         jobs.clear()
         requested = emptyMap()
+        // Main-dispatcher cancellation can run finally immediately. Detach jobs
+        // and demands first so cleanup cannot mutate this iteration or retry work.
+        pending.forEach { it.cancel() }
         cache.snapshot().keys.forEach { cache.remove(it) }
         publish()
     }
