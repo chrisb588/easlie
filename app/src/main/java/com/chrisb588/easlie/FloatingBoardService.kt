@@ -28,6 +28,20 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.compose.ui.platform.ComposeView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.chrisb588.easlie.canvas.FullScreenCanvas
+import com.chrisb588.easlie.ui.theme.EaslieTheme
 import kotlin.math.roundToInt
 
 class FloatingBoardService : Service() {
@@ -36,6 +50,7 @@ class FloatingBoardService : Service() {
     private var boardView: View? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var foregroundStarted = false
+    private var composeOwner: OverlayComposeOwner? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -154,9 +169,12 @@ class FloatingBoardService : Service() {
             windowManager = manager
             layoutParams = params
             boardView = view
+            isBoardAttached = true
             return true
         } catch (exception: RuntimeException) {
             Log.e(TAG, "Unable to attach floating board", exception)
+            composeOwner?.destroy()
+            composeOwner = null
             return false
         }
     }
@@ -243,15 +261,23 @@ class FloatingBoardService : Service() {
             )
         )
 
-        val boardText = TextView(context).apply {
-            text = getString(R.string.floating_board_content)
-            contentDescription = getString(R.string.floating_board_overlay_label)
-            setTextColor(Color.WHITE)
-            setGravity(Gravity.CENTER)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+        val owner = OverlayComposeOwner()
+        root.setViewTreeLifecycleOwner(owner)
+        root.setViewTreeViewModelStoreOwner(owner)
+        root.setViewTreeSavedStateRegistryOwner(owner)
+        composeOwner = owner
+        val boardCanvas = ComposeView(context).apply {
+            setContent {
+                EaslieTheme {
+                    FullScreenCanvas(
+                        board = (application as EaslieApplication).board,
+                        floatingMode = true
+                    )
+                }
+            }
         }
         content.addView(
-            boardText,
+            boardCanvas,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -288,6 +314,7 @@ class FloatingBoardService : Service() {
         addMoveListener(header)
         addResizeListener(resizeHandle)
         addResizeListener(leftResizeHandle, fromLeft = true)
+        owner.start()
         return root
     }
 
@@ -468,10 +495,29 @@ class FloatingBoardService : Service() {
         } catch (exception: IllegalArgumentException) {
             Log.w(TAG, "Floating board was already removed", exception)
         } finally {
+            isBoardAttached = false
+            (application as EaslieApplication).board.save()
+            composeOwner?.destroy()
+            composeOwner = null
             boardView = null
             layoutParams = null
             windowManager = null
             windowContext = null
+        }
+    }
+
+    private class OverlayComposeOwner : LifecycleOwner, SavedStateRegistryOwner, ViewModelStoreOwner {
+        private val registry = LifecycleRegistry(this)
+        private val savedStateController = SavedStateRegistryController.create(this)
+        override val lifecycle: Lifecycle get() = registry
+        override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
+        override val viewModelStore = ViewModelStore()
+
+        init { savedStateController.performAttach(); savedStateController.performRestore(null) }
+        fun start() { registry.currentState = Lifecycle.State.RESUMED }
+        fun destroy() {
+            registry.currentState = Lifecycle.State.DESTROYED
+            viewModelStore.clear()
         }
     }
 
@@ -537,6 +583,8 @@ class FloatingBoardService : Service() {
         (value * resources.displayMetrics.density).roundToInt()
 
     companion object {
+        @Volatile var isBoardAttached = false
+            private set
         private const val TAG = "FloatingBoardService"
         private const val NOTIFICATION_CHANNEL_ID = "floating_board"
         private const val NOTIFICATION_ID = 3

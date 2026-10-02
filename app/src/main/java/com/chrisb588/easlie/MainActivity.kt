@@ -69,6 +69,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (FloatingBoardService.isBoardAttached) {
+            if (savedInstanceState == null) receiveImages(intent)
+            finish()
+            return
+        }
         enableEdgeToEdge()
         refreshOverlayPermission()
         if (savedInstanceState == null) receiveImages(intent)

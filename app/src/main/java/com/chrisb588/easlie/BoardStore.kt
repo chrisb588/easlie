@@ -124,8 +124,10 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
         scope.launch { mutex.withLock { if (writable && ready) { change(); dirty = true } } }
     }
 
-    fun transformViewport(focal: CanvasPoint, pan: CanvasPoint, zoom: Float, size: CanvasSize) = edit {
-        fullScreen = fullScreen.transformedBy(focal, pan, zoom, size)
+    fun transformViewport(focal: CanvasPoint, pan: CanvasPoint, zoom: Float, size: CanvasSize,
+        floatingMode: Boolean = false) = edit {
+        val transformed = viewportFor(floatingMode).transformedBy(focal, pan, zoom, size)
+        if (floatingMode) floating = transformed else fullScreen = transformed
     }
 
     private fun normalizedStack(content: List<BoardItem>) = content.inStackingOrder()
@@ -182,8 +184,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
         }
     }
 
-    fun refreshImages(density: Float) {
-        renderer.refresh(items, sources, viewport, windowSize, density)
+    fun refreshImages(density: Float, floatingMode: Boolean = false) {
+        renderer.refresh(items, sources, viewportFor(floatingMode), windowSize, density)
     }
 
     fun releaseImages() { renderer.clear() }
