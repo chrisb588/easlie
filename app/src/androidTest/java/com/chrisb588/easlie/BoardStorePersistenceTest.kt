@@ -136,11 +136,15 @@ class BoardStorePersistenceTest {
             await { store.items.size == 1 && store.message != null }
             onMain {
                 assertEquals(listOf(good), store.items)
-                assertTrue(store.images.containsKey(good.id))
                 assertEquals(full, store.viewportFor(false))
                 assertEquals(floating, store.viewportFor(true))
                 assertTrue(store.message!!.contains("1 unreadable image(s)"))
             }
+            onMain {
+                store.resizeWindow(CanvasSize(600f, 400f))
+                store.refreshImages(1f)
+            }
+            await { store.images.containsKey(good.id) }
             // Until a successful replacement save, the original manifest still owns this file.
             assertTrue(storage.asset("broken").exists())
         } finally { directory.deleteRecursively() }
