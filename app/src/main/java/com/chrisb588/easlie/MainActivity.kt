@@ -248,7 +248,11 @@ private fun FloatingBoardScreen(
                 }
             }
         }
-        FullScreenCanvas(board = board, modifier = Modifier.weight(1f))
+        if (board.canEdit) {
+            FullScreenCanvas(board = board, modifier = Modifier.weight(1f))
+        } else if (!board.migrationFailed) {
+            Text("Opening board…")
+        }
     }
 }
 
