@@ -20,6 +20,21 @@ For each row below, record **pass**, **fail**, or **pending**, the actual observ
 | Permission denial then approval | Starting without overlay permission, request floating mode and deny it in system settings. Confirm the full-screen board remains usable and unchanged. Request again, grant permission, enter floating mode, make a recognizable edit, and return. Record screen capture and crash log status. Pass only when the floating window attaches after approval, the edit appears on return, and there is no crash or data loss. | Pending — |
 | Final performance and lifecycle results | Run the repeated physical-tablet workloads in [the image profiling procedure](image-performance-profile.md). Attach peak memory samples, slow/frozen frame counts and thresholds, decode times, cache observations, OOM/crash status, and window/service/notification cleanup evidence. Describe any unresolved regressions. | Pending — |
 
+## Lifecycle evidence capture
+
+At each floating-mode entry, return, and close, record a screen capture and the following read-only diagnostics. Use a distinct `STEP` such as `entry-1` or `close-1` for every checkpoint, and replace `DEVICE` with the tablet's ADB serial. Run the commands promptly after the UI settles, before starting the next cycle. The host and tablet timestamps make screen recordings and logs comparable.
+
+```sh
+date -Is > "${STEP}-time.txt"
+adb -s DEVICE shell date >> "${STEP}-time.txt"
+adb -s DEVICE shell dumpsys activity services com.chrisb588.easlie > "${STEP}-services.txt"
+adb -s DEVICE shell dumpsys window windows > "${STEP}-windows.txt"
+adb -s DEVICE shell dumpsys notification --noredact > "${STEP}-notifications.txt"
+adb -s DEVICE logcat -d -v threadtime -s FloatingBoardService:E AndroidRuntime:E > "${STEP}-errors.txt"
+```
+
+Inspect the full files rather than relying only on a search result. At entry, confirm `FloatingBoardService` is active, one easlie overlay window is attached, and the easlie ongoing notification is visible. After return or close, confirm the service, overlay window, and ongoing notification are absent. Search the saved files for `com.chrisb588.easlie`, `FloatingBoardService`, and the notification title shown on the tablet; Android's `dumpsys` layout varies by version. A cached app process after close is acceptable by itself: it is not an active service or attached window. Record any remaining component, its checkpoint and timestamp, then repeat the capture after a short idle period to distinguish delayed cleanup from a persistent leak. The error log should show no crash or overlay attach/remove errors; save a broader logcat trace if a failure occurs. These diagnostics supplement the visible notification shade and window check and do not establish bitmap or memory behavior by themselves.
+
 ## Result record
 
 - Device / Android / vendor restrictions:
