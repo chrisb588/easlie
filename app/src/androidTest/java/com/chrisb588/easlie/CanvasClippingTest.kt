@@ -4,6 +4,11 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -24,6 +29,50 @@ import org.junit.Test
 
 class CanvasClippingTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun disposingOutgoingHostKeepsFloatingImages() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val fixture = Uri.parse("content://com.chrisb588.easlie.test.images/clipping.png")
+        instrumentation.targetContext.contentResolver.call(fixture, "create-clipping-fixture", null, null)
+        val board = BoardStore()
+        var showFullScreen by mutableStateOf(true)
+        var showFloating by mutableStateOf(false)
+        rule.setContent {
+            Row(Modifier.size(600.dp, 300.dp)) {
+                if (showFullScreen) key("full-screen") { FullScreenCanvas(board, Modifier.size(300.dp)) }
+                if (showFloating) key("floating") { FullScreenCanvas(board, Modifier.size(300.dp), floatingMode = true) }
+            }
+        }
+        rule.runOnIdle { board.enqueueImport(instrumentation.targetContext.contentResolver, listOf(fixture)) }
+        rule.waitUntil(5000) { board.images.isNotEmpty() }
+        rule.runOnIdle { showFloating = true }
+        rule.waitForIdle()
+        rule.runOnIdle { showFullScreen = false }
+        rule.waitForIdle()
+        rule.runOnIdle { org.junit.Assert.assertTrue("Outgoing host cleared the floating image", board.images.isNotEmpty()) }
+    }
+
+    @Test fun highlyZoomedImageStillPaintsWhenItsOriginIsFarOutsideTheWindow() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val fixture = Uri.parse("content://com.chrisb588.easlie.test.images/clipping.png")
+        instrumentation.targetContext.contentResolver.call(fixture, "create-clipping-fixture", null, null)
+        val board = BoardStore()
+        rule.setContent { FullScreenCanvas(board, Modifier.size(300.dp)) }
+        rule.runOnIdle { board.enqueueImport(instrumentation.targetContext.contentResolver, listOf(fixture)) }
+        rule.waitUntil(5000) { board.images.isNotEmpty() }
+        for (zoom in listOf(4f, 5f, 8f)) {
+            rule.runOnIdle {
+                board.update(board.items.single().copy(width = 2446.6614f, height = 1053.6718f,
+                    rotationDegrees = 123.40677f))
+                board.viewport = CanvasViewport(center = board.items.single().center, zoom = zoom)
+            }
+            rule.waitForIdle()
+            val pixels = rule.onNodeWithTag(com.chrisb588.easlie.canvas.CanvasTestTags.FullScreenBoard)
+                .captureToImage().toPixelMap()
+            assertEquals("Image disappeared at zoom $zoom", Color.Red,
+                pixels[pixels.width / 2, pixels.height / 2])
+        }
+    }
 
     @Test fun zoomedAndResizedRotatedImagesCannotPaintOverControls() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

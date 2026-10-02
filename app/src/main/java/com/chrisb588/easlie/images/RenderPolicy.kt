@@ -39,14 +39,18 @@ internal class ByteImageCache<K, V>(val budget: Long, private val bytes: (V) -> 
     fun remove(key: K) {
         entries.remove(key)?.let { sizeBytes -= bytes(it) }
     }
-    fun put(key: K, value: V) {
-        if (bytes(value) > budget) return
+    fun put(key: K, value: V, allowProtectedEviction: Boolean = true): Boolean {
+        val valueBytes = bytes(value)
+        if (valueBytes > budget) return false
+        if (!allowProtectedEviction && valueBytes + entries.filterKeys { it != key && it in protectedKeys }
+                .values.sumOf(bytes) > budget) return false
         remove(key)
         entries[key] = value
         sizeBytes += bytes(value)
         while (sizeBytes > budget) {
             remove(entries.keys.firstOrNull { it !in protectedKeys } ?: entries.keys.first())
         }
+        return true
     }
 }
 

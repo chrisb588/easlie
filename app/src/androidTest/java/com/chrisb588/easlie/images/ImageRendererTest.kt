@@ -91,6 +91,53 @@ class ImageRendererTest {
         }
     }
 
+    @Test fun admittingNewImageDoesNotEvictAnUnchangedVisibleImageDuringDownsize() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val files = (0..3).map { File.createTempFile("crowded-render-", ".png", context.cacheDir) }
+        val dimensions = listOf(384 to 320, 384 to 320, 384 to 320, 512 to 512)
+        files.zip(dimensions).forEach { (file, dimensions) ->
+            Bitmap.createBitmap(dimensions.first, dimensions.second, Bitmap.Config.ARGB_8888).let { bitmap ->
+                file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                bitmap.recycle()
+            }
+        }
+        val sources = files.zip(dimensions).mapIndexed { index, (file, dimensions) ->
+            "$index" to ImageSource(file, dimensions.first, dimensions.second, 0, false)
+        }.toMap()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val renderer = ImageRenderer(scope, 2400L * 1024)
+        val a = BoardItem("0", CanvasPoint(0f, 0f), 384f, 320f, zIndex = 0)
+        val c = a.copy(id = "1", zIndex = 1)
+        val d = a.copy(id = "2", zIndex = 2)
+        val b = a.copy(id = "3", width = 512f, height = 512f, zIndex = 2)
+        val size = CanvasSize(1200f, 800f)
+        suspend fun finishDecodes() = withTimeout(5000) {
+            do {
+                val children = scope.coroutineContext[Job]!!.children.toList()
+                children.joinAll()
+            } while (scope.coroutineContext[Job]!!.children.any())
+        }
+        try {
+            repeat(20) {
+                withContext(Dispatchers.Main) { renderer.clear() }
+                withContext(Dispatchers.Main) {
+                    renderer.refresh(listOf(a, b), sources, CanvasViewport(), size, 1f)
+                }
+                finishDecodes()
+                withContext(Dispatchers.Main) {
+                    renderer.refresh(listOf(a, c, d, b), sources, CanvasViewport(zoom = 8f), size, 1f)
+                }
+                finishDecodes()
+                withContext(Dispatchers.Main) {
+                    assertEquals("A settled viewport must retain every visible image", setOf("0", "1", "2", "3"), renderer.images.keys)
+                }
+            }
+        } finally {
+            withContext(Dispatchers.Main) { renderer.clear(); scope.cancel() }
+            files.forEach { it.delete() }
+        }
+    }
+
     @Test fun subsamplingPreservesExifOrientationWithoutKeepingSourcePixels() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = File.createTempFile("oriented-test-", ".png", context.cacheDir)

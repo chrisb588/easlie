@@ -66,6 +66,39 @@ class BoardRenderingPersistenceTest {
         } finally { onMain { store.releaseImages() }; directory.deleteRecursively() }
     }
 
+    @Test fun outgoingHostCannotClearOrResizeTheActiveFloatingRenderer() {
+        val fixture = Uri.parse("content://com.chrisb588.easlie.test.images/clipping.png")
+        instrumentation.targetContext.contentResolver.call(fixture, "create-clipping-fixture", null, null)
+        lateinit var store: BoardStore
+        val outgoing = Any()
+        val incoming = Any()
+        val fullSize = CanvasSize(1200f, 800f)
+        val floatingSize = CanvasSize(600f, 400f)
+        try {
+            onMain {
+                store = BoardStore()
+                store.attachCanvas(outgoing)
+                store.refreshImages(outgoing, 1f, false, fullSize)
+                store.enqueueImport(instrumentation.targetContext.contentResolver, listOf(fixture))
+            }
+            await { store.items.size == 1 && !store.importing }
+            onMain { store.refreshImages(outgoing, 1f, false, fullSize) }
+            await { store.images.isNotEmpty() }
+            onMain {
+                store.attachCanvas(incoming)
+                store.refreshImages(incoming, 1f, true, floatingSize)
+                val image = store.images.values.single()
+                store.refreshImages(outgoing, 1f, false, fullSize)
+                assertEquals(floatingSize, store.windowSize)
+                store.detachCanvas(outgoing)
+                assertSame(image, store.images.values.single())
+                assertTrue(store.isActiveCanvas(incoming))
+                store.detachCanvas(incoming)
+                assertTrue(store.images.isEmpty())
+            }
+        } finally { onMain { store.items.toList().forEach { store.delete(it.id) }; store.releaseImages() } }
+    }
+
     @Test fun failedImportAndDeletionKeepTheRenderedItemAndOwnedAsset() {
         val directory = File(instrumentation.targetContext.cacheDir, "render-commit-${UUID.randomUUID()}")
         val resolver = instrumentation.targetContext.contentResolver

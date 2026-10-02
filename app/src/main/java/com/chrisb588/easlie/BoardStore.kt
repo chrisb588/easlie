@@ -53,6 +53,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val renderer = ImageRenderer(scope, cacheBudget)
     private val sources = mutableMapOf<String, ImageSource>()
+    private val canvasOwners = mutableListOf<Any>()
+    private var activeCanvasOwner by mutableStateOf<Any?>(null)
     private val mutex = Mutex()
     private val pending = ArrayDeque<Pair<ContentResolver, List<Uri>>>()
     private var writable = true
@@ -186,6 +188,25 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
 
     fun refreshImages(density: Float, floatingMode: Boolean = false) {
         renderer.refresh(items, sources, viewportFor(floatingMode), windowSize, density)
+    }
+
+    internal fun attachCanvas(owner: Any) {
+        canvasOwners.add(owner)
+        activeCanvasOwner = owner
+    }
+
+    internal fun isActiveCanvas(owner: Any): Boolean = activeCanvasOwner === owner
+
+    internal fun refreshImages(owner: Any, density: Float, floatingMode: Boolean, size: CanvasSize) {
+        if (!isActiveCanvas(owner)) return
+        resizeWindow(size)
+        renderer.refresh(items, sources, viewportFor(floatingMode), size, density)
+    }
+
+    internal fun detachCanvas(owner: Any) {
+        canvasOwners.remove(owner)
+        activeCanvasOwner = canvasOwners.lastOrNull()
+        if (canvasOwners.isEmpty()) renderer.clear()
     }
 
     fun releaseImages() { renderer.clear() }

@@ -61,18 +61,32 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
             if (id !in requested) cache.remove(id)
         }
         publish()
-        for (demand in demands) {
+        startDecodes(sources)
+    }
+
+    private fun startDecodes(sources: Map<String, ImageSource>) {
+        // Free excess pixels before admitting new images or upgrading other entries.
+        // Otherwise an old sharper tier can evict an unchanged visible image, which
+        // has no decode queued and would stay blank until the next viewport change.
+        val cached = cache.snapshot()
+        val decodeOrder = requested.values.sortedBy { demand ->
+            if ((cached[demand.id]?.sample ?: Int.MAX_VALUE) < demand.sample) 0 else 1
+        }
+        for (demand in decodeOrder) {
             val old = cache[demand.id]
             if (old?.sample == demand.sample || jobs[demand.id]?.first == demand.sample) continue
             val source = sources.getValue(demand.id)
             val job = scope.launch {
                 var decoded: Bitmap? = null
+                var admitted = false
                 try {
-                    val bitmap = withContext(Dispatchers.IO) {
-                        decoder.withPermit { source.decode(demand.sample).also { decoded = it } }
+                    // Queue on the main dispatcher so IO scheduling cannot reorder downsizes.
+                    val bitmap = decoder.withPermit {
+                        withContext(Dispatchers.IO) { source.decode(demand.sample).also { decoded = it } }
                     }
                     if (requested[demand.id]?.sample == demand.sample) {
-                        cache.put(demand.id, CachedImage(demand.sample, bitmap, bitmap.asImageBitmap()))
+                        admitted = cache.put(demand.id, CachedImage(demand.sample, bitmap, bitmap.asImageBitmap()),
+                            allowProtectedEviction = false)
                         if (cache[demand.id]?.bitmap === bitmap) {
                             decoded = null // Cache owns it; Compose may still reference an evicted bitmap.
                         }
@@ -85,6 +99,9 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
                 } finally {
                     decoded?.recycle() // Includes cancellation while returning from the IO dispatcher.
                     if (jobs[demand.id]?.second === currentCoroutineContext().job) jobs.remove(demand.id)
+                    // An admission deferred behind an oversized old tier gets another chance
+                    // as soon as a downsize frees room, without waiting for a user gesture.
+                    if (admitted) startDecodes(sources)
                 }
             }
             jobs[demand.id] = demand.sample to job
