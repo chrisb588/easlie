@@ -1,6 +1,8 @@
 package com.chrisb588.easlie.images
 
 import android.graphics.Bitmap
+import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -26,11 +28,13 @@ internal data class RenderRequest(val id: String, val tier: ResolutionTier) {
 private data class CachedImage(val sample: Int, val bitmap: Bitmap, val image: ImageBitmap)
 
 /** Main-thread ownership; only file decoding runs on IO. One decode bounds transient allocations. */
-internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
+internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, private val profile: Boolean = false) {
     private val cache = ByteImageCache<String, CachedImage>(budget) { it.bitmap.allocationByteCount.toLong() }
     private val decoder = Semaphore(1)
     private val jobs = mutableMapOf<String, Pair<Int, Job>>()
     private var requested = emptyMap<String, RenderRequest>()
+    private val profileCounters = ImageProfileCounters()
+    private var refreshes = 0L
     var images by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
         private set
 
@@ -61,7 +65,14 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
             if (id !in requested) cache.remove(id)
         }
         publish()
+        if (profile) demands.forEach { demand ->
+            if (cache[demand.id]?.sample == demand.sample) profileCounters.recordHit()
+            else profileCounters.recordMiss()
+        }
         startDecodes(sources)
+        if (profile && ++refreshes % 100L == 0L) {
+            Log.d("EaslieImageProfile", "refreshes=$refreshes ${profileCounters.snapshot()} cache_bytes=${cache.sizeBytes} budget_bytes=${cache.budget} visible=${visible.size} nearby=${nearby.size}")
+        }
     }
 
     private fun startDecodes(sources: Map<String, ImageSource>) {
@@ -75,15 +86,25 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
         for (demand in decodeOrder) {
             val old = cache[demand.id]
             if (old?.sample == demand.sample || jobs[demand.id]?.first == demand.sample) continue
+            if (profile) profileCounters.recordScheduled()
             val source = sources.getValue(demand.id)
             val job = scope.launch {
                 var decoded: Bitmap? = null
                 var admitted = false
                 try {
+                    var decodeMillis = 0L
                     // Queue on the main dispatcher so IO scheduling cannot reorder downsizes.
                     val bitmap = decoder.withPermit {
-                        withContext(Dispatchers.IO) { source.decode(demand.sample).also { decoded = it } }
+                        withContext(Dispatchers.IO) {
+                            val start = SystemClock.elapsedRealtimeNanos()
+                            source.decode(demand.sample).also {
+                                decoded = it
+                                decodeMillis = (SystemClock.elapsedRealtimeNanos() - start) / 1_000_000
+                            }
+                        }
+
                     }
+                    if (profile) Log.d("EaslieImageProfile", "decode_ms=$decodeMillis sample=${demand.sample} bytes=${bitmap.allocationByteCount}")
                     if (requested[demand.id]?.sample == demand.sample) {
                         admitted = cache.put(demand.id, CachedImage(demand.sample, bitmap, bitmap.asImageBitmap()),
                             allowProtectedEviction = false)
@@ -94,7 +115,8 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (failure: Exception) {
+                    if (profile) Log.w("EaslieImageProfile", "decode_failed sample=${demand.sample}", failure)
                     // Keep the existing image if either an upgrade or downsize fails.
                 } finally {
                     decoded?.recycle() // Includes cancellation while returning from the IO dispatcher.
