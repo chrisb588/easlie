@@ -1,17 +1,55 @@
 # easlie
 
-A native Android reference board that stays close while you work. Arrange images on a freeform canvas,
-then open that same board in floating mode over another app.
+A native Android reference board. Arrange images on a freeform canvas, then open
+that board in a movable, resizable floating window over another app.
 
-## Goals
+## Specification scope
 
-- Make collecting reference images from the gallery, browser, Pinterest, and other Android apps quick.
-- Make navigating and arranging a visual board feel immediate, even with 20 to 30 large source images.
-- Keep the board visible and usable as a movable, resizable floating board while another app is open.
-- Prioritize the floating-mode experience, which is the primary way v0.1 is intended to be used.
-- Preserve the board locally across app restarts and device reboots.
-- Build the smallest sound foundation that can later support multiple boards without redesigning the
-  canvas or persistence model.
+This specification defines the scope and behavior for v0.2.0 and v0.3.0. The
+v0.1.0 feature list records the released foundation. Existing features must
+continue to work unless a requirement for the relevant release changes their
+behavior. Automatic image snapping is deferred entirely to v0.3.0; it is not a
+v0.2.0 implementation or completion requirement.
+
+The lead decides the final design and architecture. The snapping proposal below
+provides concrete behavior to review during implementation.
+
+## Released v0.1.0 features
+
+- One persistent freeform reference board.
+- Full-screen and floating views of the same board.
+- Separate saved canvas viewports for full-screen and floating modes.
+- Canvas panning and focal-point pinch zoom.
+- Image selection, movement, aspect-preserving resizing, rotation, and deletion.
+- Persistent image stacking order, with newly imported images above existing images.
+- Import of multiple images through the Android photo picker.
+- Single-image and multiple-image imports through Android share intents.
+- App-owned image copies that remain available independently of their source files.
+- Local atomic save and restore across app restarts and device reboots.
+- Recovery messages for images that cannot be restored.
+- Resolution-aware background image decoding, visibility culling, and a bounded cache.
+- Movable and resizable floating window with return and close actions.
+- Overlay-permission handling and an ongoing foreground-service notification.
+- Performance and lifecycle validation with 20 to 30 real images on a physical tablet,
+  recorded in [the v0.1.0 profiling report](docs/profiling/2026-10-02/report.md).
+
+## v0.2.0 goals
+
+Redesign the full-screen and floating-board experiences. Make their controls and
+interactions easier to discover and use.
+
+Allow canvas gestures over unselected images. Support multiple independent boards
+with naming and renaming. Add a small About section and light, dark, and system
+appearance options.
+
+Preserve existing board data when upgrading from v0.1.0. Maintain responsive image
+manipulation and reliable floating-window behavior.
+
+## v0.3.0 goals
+
+Add automatic image snapping during movement, resizing, and rotation in both
+full-screen and floating modes. Preserve the board management, gestures, appearance
+settings, and reliability introduced in v0.2.0.
 
 ## Non-goals
 
@@ -19,355 +57,418 @@ then open that same board in floating mode over another app.
 - Drawing, text, links, video, animation, or other board item types.
 - Image editing beyond position, size, and rotation.
 - Automatic layout, tagging, search, folders, or mood-board templates.
-- Multiple boards in v0.1.
 - Desktop, iOS, phone-specific, or foldable-specific interfaces.
-- Exporting or sharing a composed board.
-
-## Product model
-
-v0.1 has exactly one board. Full-screen mode and floating mode edit the same board data. Only one mode is
-interactive at a time: starting floating mode moves the board out of the full-screen host, and returning
-to full-screen mode closes the floating board before opening the activity.
-
-Each mode has its own saved viewport because the full-screen and floating board have different window
-sizes. Panning or zooming in one mode does not change the other mode's viewport. Floating-mode UX takes
-priority when the needs of the two modes conflict.
-
-The board contains:
-
-- A full-screen viewport and a floating-mode viewport, each with a world-space center and zoom level.
-- A list of image items, each with a persistent front-to-back stacking order.
-  When images overlap, the item higher in that order appears on top. Newly
-  imported items are placed above existing items. `zIndex` values are integers spaced by 10 by default.
-  Reordering uses an available integer between neighboring items. If no integer remains in a gap, the app
-  rewrites all indexes with intervals of 10. If duplicate values are loaded, later manifest items appear
-  above earlier ones until the app normalizes the indexes during the next successful save.
-- An app-owned copy of each imported image in the app's private storage. The
-  board stores a stable asset ID for each copy, so it can still load the image
-  if the original gallery file or shared content URI is moved, deleted, or no
-  longer available.
-
-Each image item stores its asset reference, world-space position, displayed width and height, rotation,
-and stacking order. Coordinates and dimensions are independent of screen pixels so the board does not
-move when the window size changes.
-
-## Experience
-
-### Full-screen board
-
-- Drag empty canvas space to pan.
-- Pinch around a focal point to zoom.
-- Tap an image to select it.
-- Drag a selected image to move it. Dragging an unselected image does not move it; the user must first tap
-  to select it, then drag it in a second gesture.
-- Drag a corner handle to resize it while preserving its aspect ratio.
-- Drag a rotation handle to rotate it.
-- Double-tap an image to open a popover menu containing a Delete action.
-- Add one or more images through the Android photo picker.
-- Accept one or more images shared from another Android app through the system
-  share menu, then import them into the board.
-- Place newly imported images near the current viewport center and above existing items. For a batch
-  import, place image centers along a diagonal from the viewport center, offsetting each subsequent image
-  right and down by 10% of the shorter viewport dimension. Wrap to a new diagonal when an item center
-  would leave the visible viewport.
-
-One-finger gestures manipulate either the selected item or the empty canvas. Two-finger gestures always
-manipulate the viewport. This rule avoids ambiguous nested transforms.
-
-Each mode opens at its own last saved viewport. Selection is temporary UI state and is not persisted.
-
-### Floating mode
-
-The user starts floating mode from the full-screen app. If floating-board permission has not been granted,
-the app explains why it is needed and opens the system overlay-permission screen. Once the floating board
-is attached, the full-screen activity finishes so that only one mode is interactive.
-
-The floating board:
-
-- Draws and edits the same board using the same canvas state and renderer.
-- Has a dedicated drag handle for moving the window without moving the canvas.
-  The handle and other floating-mode controls appear when the user taps the floating
-  board and hide after a short period of inactivity. The handle retains a
-  sufficiently large invisible touch target for accessibility. Controls expose content descriptions,
-  support accessibility focus, and remain visible while accessibility focus is within the floating
-  board. A first-run hint identifies the move, resize, return, and close controls.
-- Has a resize affordance with a practical minimum size.
-- Has actions to return to full-screen mode and close the floating board. Returning removes the floating
-  board and stops its service before opening the full-screen activity.
-- Remains visible while another app is in front.
-- Shows an ongoing foreground-service notification while active.
-
-Closing the floating board removes its window and stops its foreground service. It does not erase or
-reset the board.
-
-## Architecture
-
-```
-                  board state
-                       |
-            +----------+----------+
-            |                     |
-     full-screen activity   floating-board service
-            |                     |
-            +----- canvas UI -----+
-                       |
-              image decode/cache
-                       |
-          manifest + app-owned assets
-```
-
-The app is a Kotlin Android project using Jetpack Compose. Native Android APIs handle media intake,
-storage, the floating-board window, and the foreground service.
-
-There is one authoritative in-memory board-content state. The full-screen Android activity and the
-floating-board service are separate hosts, but only one is interactive at a time. An activity is the
-Android component that owns the normal full-screen easlie screen. Both hosts obtain the same
-application-scoped store, which loads once before accepting edits and serializes all board mutations and
-persistence snapshots. Each host creates its own Compose UI and lifecycle ownership. The renderer,
-gesture logic, and coordinate conversion code must not be duplicated between the hosts. Each host keeps
-its own viewport, selection, controls, and window-lifecycle state.
-
-The prototype should use direct, concrete components rather than introduce layers for hypothetical
-features. Multi-board support later should add board manifests and a switcher, not replace the canvas or
-image pipeline.
-
-## Canvas
-
-The canvas maintains one transform between world coordinates and window coordinates. Panning changes the
-world-space viewport center. Zooming changes the scale around the gesture focal point so the content under
-the user's fingers remains stationary.
-
-Item bounds remain in world coordinates. Hit testing converts pointer positions into world coordinates,
-then tests the transformed item shapes from highest to lowest stacking order.
-
-Rendering must cull items whose rotation-aware transformed bounds do not intersect the visible window,
-with a small margin to prevent images flashing in at the edges.
-
-## Image ingestion and storage
-
-The app accepts common still-image MIME types from the photo picker and `ACTION_SEND` or
-`ACTION_SEND_MULTIPLE` intents. Unsupported or unreadable inputs are rejected without changing the board.
-
-On import, the app copies each image into app-owned storage and records an asset identifier in the board
-manifest. It does not rely on the source content URI remaining readable. This costs additional device
-storage, but gives picker and share-intent imports identical lifetime semantics.
-
-Imports are transactional per image:
-
-1. Copy the source into a temporary app-owned file.
-2. Read enough metadata to validate the image, apply its EXIF orientation, and determine its displayed
-   dimensions and aspect ratio.
-3. Move the completed asset into its final location.
-4. Add the item to board state and persist the manifest.
-
-A failed import removes its temporary file and leaves existing board content unchanged. If the process
-stops after moving an asset but before saving its item, the file may be left unreferenced. After a
-successful manifest load and after the board becomes usable, the app schedules low-priority background
-reconciliation on an I/O thread rather than blocking startup. Reconciliation lists asset filenames and
-compares their IDs with the manifest; it does not decode images or read their contents. It removes stale
-temporary files and final assets that no valid manifest references. It never modifies an unsupported
-future schema.
-
-Deletion first removes the item from board state and atomically saves the new manifest. Only after that
-save succeeds does the app delete the asset when no remaining item references it. If file deletion fails,
-later reconciliation retries it. If the manifest save fails, the item and asset remain unchanged and the
-user sees an error.
-
-## Image resolution and cache [can u explain each bullet point to me in a less
-technical way? but dont modify the bullet points tho. just explain]
-
-Source images remain encoded on disk. The app decodes only the resolution needed for an image's current
-on-screen size.
-
-- Choose a decode size from the image's transformed screen bounds and device density.
-- Subsample during decode rather than decode the original and scale it afterward.
-- Decode away from the main thread and cancel work that is no longer relevant.
-- Draw an existing lower-resolution copy until a sharper copy is ready.
-- Avoid repeated decode churn by adding hysteresis before changing resolution tiers.
-- Keep decoded bitmaps in a byte-bounded LRU cache sized from the device's available memory class.
-- Prefer visible items, then items just outside the viewport, when retaining decoded images.
-- Release high-resolution copies when items become small or leave the viewport.
-
-The exact resolution tiers and cache budget are profiling results, not constants to guess in advance.
-
-## Persistence
-
-The board is stored locally as a versioned JSON manifest beside its asset directory. A save means writing
-the current board state to this manifest on disk, not merely updating memory. The initial schema contains:
-
-```
-Board
-  schemaVersion
-  viewports
-    fullScreen { centerX, centerY, zoom }
-    floating { centerX, centerY, zoom }
-  items[]
-    id
-    assetId
-    x
-    y
-    width
-    height
-    rotationDegrees
-    zIndex
-```
-
-Manifest writes are atomic: write a complete temporary file, then replace the previous manifest. Save
-immediately after imports and deletions. Changes may be debounced during continuous gestures, but save
-periodically during a long gesture, when a gesture ends, and when either mode loses visibility. A
-visibility callback is an extra opportunity to save, not a required final callback, because Android may
-stop the process without delivering it.
-
-On startup, malformed items or missing assets are skipped without changing the original manifest. After
-the board opens, a persistent, dismissible message states how many items could not be restored and why;
-diagnostic details are also logged. An unsupported future schema version must not be overwritten.
-
-## Android platform behavior
-
-Floating mode uses `TYPE_APPLICATION_OVERLAY` through `WindowManager` and requires
-`SYSTEM_ALERT_WINDOW`. Permission denial leaves full-screen mode fully usable.
-
-The floating-board service is declared with the foreground-service permissions and type required by the target
-Android version. If no standard type fits, it uses `specialUse` with a precise manifest explanation. This
-declaration is subject to Google Play review.
-
-The normal launch path starts the floating board while the activity is visible. No background path may assume
-that holding `SYSTEM_ALERT_WINDOW` alone permits a foreground-service start. On Android 15 and newer, a
-background start using that exemption requires the floating board to already be visible before the
-foreground service starts.
-
-The notification returns to full-screen mode and offers a stop action. If the service or process is stopped, the
-window is removed cleanly and the last board state remains on disk.
-
-## Performance requirements
-
-Performance is evaluated on the development Android tablet with a board of 20 to 30 real reference images,
-including several high-resolution photos.
-
-- Pan, zoom, move, resize, and rotate must remain responsive without main-thread image decoding.
-- The app must not run out of memory during repeated zooming, panning, importing, and floating-board
-  resizing.
-- A newly needed higher-resolution image may appear progressively, but interaction must not block while it
-  decodes.
-- Opening and closing floating mode repeatedly must not leak windows, services, or decoded bitmaps.
-- Profiling results must record peak memory, slow or frozen frames, decode time, and cache hit behavior.
-
-The prototype is not complete until it has been profiled with real images. Emulator-only testing does not
-satisfy these requirements.
-
-## v0.1 scope
-
-In scope:
-
-- One persistent freeform board
-- Canvas pan and zoom
-- Image selection, move, aspect-preserving resize, rotation, and deletion
-- Multi-image import from the Android photo picker
-- Single and multiple image share intents
-- Resolution-aware image decoding and a bounded LRU cache
-- Visibility culling and background decoding
-- Movable and resizable floating board
-- Foreground-service lifecycle and notification
-- Local, atomic save and restore
-- Profiling with 20 to 30 real images on a physical Android tablet
-
-Deferred, in likely order: multiple boards, board naming and switching, item reordering
-(manually changing an item's front-to-back stacking position, such as bringing it to the front or
-sending it to the back), duplicate item, undo and redo, board export, richer item types, and backup
-or sync.
-
-## Build order
-
-1. Set up the Kotlin and Jetpack Compose Android project, including the required Android SDK,
-   build tooling, and Gradle dependencies, then verify it runs on the target tablet.
-2. Build a single in-memory canvas with stable pan and focal-point zoom.
-3. Prove floating-mode feasibility on the target tablet with a minimal draggable, resizable board,
-   including permission, foreground-service, notification, vendor lifecycle, and intended Google Play
-   declaration behavior.
-4. Add picker import, share intents, and item manipulation.
-5. Add the versioned manifest, app-owned asset storage, atomic writes, reconciliation, and restore
-   behavior.
-6. Build resolution-aware background decoding, visibility culling, and the LRU cache.
-7. Profile a 20 to 30 image board and tune resolution tiers and cache limits from measured results.
-8. Host the shared canvas in the proven floating-mode host and complete its lifecycle and accessibility
-   behavior.
-9. Repeat the performance and lifecycle tests with both full-screen and floating-mode hosts.
-
-Do not start multi-board work during v0.1. The single-board manifest must first prove that the persisted
-unit is complete and portable within the app.
-
-## Completion criteria
-
-v0.1 is complete when all of the following work on the target Android tablet:
-
-1. Import multiple gallery images and receive images shared from at least a browser and one image-focused
-   app.
-2. Arrange 20 to 30 real images using pan, zoom, move, resize, rotate, and delete without an out-of-memory
-   failure or interaction-blocking decode.
-3. Leave and reopen the app, then reboot the tablet, with the board and viewports restored and every imported
-   image still readable.
-4. Open the board in floating mode over another app, move and resize it, edit the board there, and see the
-   same board changes after returning to full-screen mode without replacing either mode's saved viewport.
-5. Deny and later grant floating-board permission without a crash or loss of board data.
-6. Close and reopen floating mode repeatedly without a leaked window, stale notification, duplicate service,
-   or lost changes.
-7. Capture a profiling report for the representative board and document the chosen cache budget and decode
-   tiers.
-
-## Known constraints
-
-- Floating-board permission is a high-friction system setting and some Android vendors impose additional
-  background-process restrictions.
-- Foreground services require a persistent user-visible notification and their declarations may be
-  reviewed by Google Play.
-- Large decoded bitmaps consume width times height times bytes-per-pixel, regardless of compressed source
-  file size. Disk size is not a useful memory estimate.
-- Compose hosted in floating mode still depends on Android view and service lifecycles. The floating board must have
-  explicit saved-state, lifecycle, and cleanup ownership.
-- App-owned image copies make persistence reliable but duplicate source storage. Storage management can be
-  revisited after the prototype proves the interaction and performance model.
-
-### Image-detail validation note — 2026-10-02
-
-On build `299f542`, the lead reported that a high-resolution photo looked slightly softer in easlie than
-in Samsung Gallery on the Samsung SM-X616B. The detail remained usable and zoom gestures stayed
-responsive. The comparison screenshots used different crops and displayed subject sizes, so they do
-not establish a matched-scale sharpness comparison. Automatic resolution upgrading for that image
-remains unverified by this visual comparison. [UNVERIFIED] The lead subsequently confirmed all manual
-acceptance criteria for issue #11, including board manipulation and zoom.
-
-The contributor considers slight softness acceptable for the prototype when reference detail remains
-usable and gestures stay responsive, subject to the lead's final acceptance decision. [OPINION]
-
-### Final performance and lifecycle record — issue #11
-
-The physical-tablet profiling used a 30-JPEG board, including five 16.4–30.1 MP photos, on the
-Samsung SM-X616B running Android 16. Three sustained pan, zoom, import, and floating-resize cycles
-completed without observed out-of-memory failures, completed-decode failures, or usable frames above
-700 ms. Peak sampled PSS was 302.30 MiB. Frames above 16.67 ms numbered 27/20,409 during pan,
-130/23,644 during zoom, and 1,589/22,217 during floating resizing. The longest completed decode was
-237 ms. The measured policy retains a 32 MiB image cache on this tablet. Independent 16/32/64 MiB
-cache comparisons recorded refresh-observation hit ratios of 75.01%/66.93%/55.65%; these use different
-requested resolution tiers and are not comparisons of identical cache keys.
-
-After activity and renderer release, diagnostic cache occupancy reached zero and idle PSS fell to
-119.55 MiB. An earlier floating lifecycle capture found no remaining easlie service or window after
-teardown. These finite measurements do not prove the absence of every possible leak. Detailed methods,
-build identities, limitations, and anonymized measurements are recorded in
-[the consolidated profiling report](docs/profiling/2026-10-02/report.md) and its linked JSON summaries.
-These measurements preceded the final manual run; they are not new measurements of build `299f542`.
-
-For the final manual run on build `299f542`, the lead confirmed all issue #11 manual criteria. This
-includes shared-board edits and independent viewports across mode changes, force-stop/relaunch and
-tablet reboot, repeated Return and Close cycles, notification Return and Stop actions, and permission
-denial followed by approval. The manual checklist records at least five Return cycles and five Close
-cycles with edits preserved and no visible stale floating window or ongoing notification. These are
-lead-reported observations, not additional service diagnostics or memory measurements. Image detail
-remained usable with responsive gestures; the slight-softness observation is recorded above.
-
-## Technical references
-
-- [Android photo picker and persistent media access](https://developer.android.com/training/data-storage/shared/photo-picker)
-- [Efficient loading of large bitmaps](https://developer.android.com/topic/performance/graphics/load-bitmap)
-- [Foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types)
-- [Android 15 foreground-service changes for overlay apps](https://developer.android.com/about/versions/15/behavior-changes-15)
+- Exporting or sharing a composed board, or adding backup functionality.
+- Board duplication, image duplication, or manual stacking-order controls.
+- Undo and redo.
+
+Profiling, performance measurements, and benchmark comparisons are out of scope
+for v0.2.0. Functional responsiveness and lifecycle checks remain required.
+
+## v0.2.0 requirements
+
+### UI/UX redesign
+
+The full-screen and floating-board redesigns are tracked by issues #19 and #20.
+
+The redesign scope, layouts, navigation, and control placement will be decided with
+the lead while implementing those issues. Their current issue bodies do not define
+the redesign requirements for v0.2.0. This specification does not prescribe a
+replacement layout or retain the previous control layout as a requirement.
+
+Both views must support the canvas behavior specified below. Full-screen mode must
+provide access to board creation, opening, renaming, and deletion, the About
+section, and appearance settings. The entry points and any corresponding
+floating-mode controls will be decided during the redesign.
+
+Floating mode must retain window movement, window resizing, return to full-screen,
+and close actions. Moving or resizing the floating window must remain distinct
+from manipulating its canvas. Returning to full-screen must preserve the active
+board. Closing floating mode must preserve its saved contents.
+
+Controls must have accessible names and usable touch targets. Selection feedback
+must remain visible in both light and dark themes. Exact feedback styling belongs
+to the redesign.
+
+Assess the redesign through concrete user tasks: selecting and deselecting an
+image, opening another board, entering floating mode, moving and resizing the
+floating window, and manipulating its canvas without activating window controls.
+Both views must provide an explicit deselect action that works even when the
+selected image fills the visible canvas. Record the lead's assessment of these
+tasks alongside the accepted design decisions. These tasks do not prescribe a
+particular layout or control placement.
+
+### Canvas gestures and transitions
+
+An unselected image must not block a canvas gesture. This applies in full-screen
+and floating modes, including areas containing several overlapping unselected images.
+
+A one-finger drag that begins on an unselected image pans the canvas, just like a
+drag on empty space. The drag must not select or move that image. A tap without a
+drag still selects the topmost image under the touch point.
+
+Dragging an already selected image moves that image. Its resize and rotation
+controls continue to manipulate the selected image. These operations must not
+accidentally pan the canvas.
+
+A fresh two-finger canvas gesture manipulates the viewport, including when either
+or both fingers begin on images. Pinch zoom keeps its focal-point behavior. All
+other supported canvas gestures must also work over unselected images. This
+requirement does not introduce a new canvas gesture such as canvas rotation.
+
+Adding a second finger to an ongoing image manipulation must not change that
+gesture into canvas manipulation. If the second finger touches a resize corner
+of the selected image during an image drag, permit a transition to two-finger
+image resizing. Both fingers contribute to resizing; neither is ignored. Resize
+according to the change in distance between the fingers, preserving the image's
+aspect ratio and keeping its center fixed at the transition. Moving the fingers'
+midpoint must not translate the image, and this gesture must not rotate it or
+manipulate the canvas. Existing one-finger corner resizing keeps its opposite
+corner fixed.
+
+A second finger elsewhere must not start canvas manipulation. To manipulate the
+canvas after image manipulation, the user must lift all fingers and start a fresh
+canvas gesture. Lifting a finger after two-finger image resizing must not transfer
+the remaining finger to canvas panning.
+
+Continuing to pan with the remaining finger after a two-finger canvas pinch is a
+good-to-have v0.2.0 behavior. Attempt to implement it without a viewport jump or
+accidental image selection or transformation. If it causes buggy canvas controls,
+it may be omitted without blocking v0.2.0 completion. In that case, the remaining
+finger stays inactive until all fingers lift and the user starts a fresh gesture.
+Record whether this continuation was implemented or omitted, and the reason for
+any omission.
+
+When an image manipulation is canceled or interrupted, retain and save the last
+displayed position, size, and rotation rather than reverting to the pre-gesture
+transform. End the interrupted gesture so later touches start a fresh gesture.
+The explicit deselect action clears selection without changing the image's
+transform.
+
+Gesture recognition must distinguish a tap from a drag using the platform's touch
+slop. Once a gesture becomes a canvas gesture, it must not select or transform an
+image when the fingers lift. Crossing another image during a canvas drag must not
+change the gesture's target.
+
+### Multiple independent boards
+
+#### Board lifecycle
+
+The user can create an empty board, open an existing board, rename a board, and
+delete a board. Creation asks for a name with a default such as `Board 1`. Every
+board has a visible, non-empty name and a stable identity independent of its name.
+Renaming changes only the name; it must not change identity, content, viewports,
+active-board status, or the destination of an ongoing import.
+
+Board names must be unique. When another board already has the requested name,
+append a number
+suffix, starting at `(2)` and increasing until the result is unused. For example,
+creating or renaming a board to `Board 1` when that name exists produces
+`Board 1 (2)`, or `Board 1 (3)` if the former also exists. Display the resulting
+name to the user. Persist names across restarts and reboots.
+
+List boards by most recently opened first. Persist that ordering across launches.
+Creating and opening a board makes it the most recently opened board; renaming
+alone does not change the ordering.
+
+Creating a board must not copy the current board's images or canvas state into
+the new board.
+
+The app displays one active board at a time. Opening another board saves pending
+changes to the current board before switching. If that save fails, the current
+board remains open and the app reports the failure.
+
+The active board identity is saved and remains active even when the app is not
+running. Closing the app does not clear it. The active board is restored on the
+next launch when it still exists. If the saved active board is missing while
+other boards exist, return to board management with a message explaining that
+the previous board is unavailable. Do not silently select another board or
+recreate the missing board. If no boards exist, the app presents an empty
+board-management state with a way to create a board. It must not recreate a
+deleted board silently.
+
+Board deletion requires confirmation that identifies the board and explains that
+its images will be removed from easlie. Deleting the active board closes its canvas
+and returns to board management. If it is floating, the floating window and its
+service must close cleanly. Deleting another board must not change the active board.
+
+#### State isolation
+
+Each board owns its image items, image assets, stacking order, saved full-screen
+viewport, and saved floating viewport. Selection is temporary and clears when
+switching boards. Editing, importing into, or deleting one board must not change
+another board's content or viewports.
+
+Importing the same source image into two boards creates independent board-owned
+copies and independent image items. Deleting either copy or its board must leave
+the other board intact. Boards must not share mutable content or asset ownership.
+
+Full-screen and floating modes edit the same active board. Only one mode is
+interactive at a time. Each board retains separate viewports for the two modes.
+Changing one viewport must not change the other mode's viewport or another board's
+viewports.
+
+An import targets the currently active board before copying begins. If the app
+was not running, use its saved active board identity. An asynchronous import or
+save must retain its destination board identity even if the user switches boards. It must
+not apply its result to whichever board happens to be active when it finishes.
+An import must not recreate a board that was deleted while the import was running.
+
+Shared images must have a destination board before import. Use the active board
+when one exists. If none exists, let the user create or open a board first. The
+choice's presentation will be decided during the redesign.
+
+For a partial import, retain successfully imported images and report which images
+failed. Offer retry for valid images that could not be imported because of a
+temporary app, source-access, or storage problem. Retry only the failed images,
+retain the original destination board identity, and do not duplicate successful
+imports. Invalid or unsupported images receive the usual import error rather
+than a retry offer for that same invalid or unsupported content. If the destination
+board was deleted, explain that the import cannot continue; retry must not recreate
+it or redirect the images to another board.
+
+#### Persistence and upgrade
+
+Persist the board collection and each board's content locally. Board identities
+must remain stable across app restarts and device reboots. Appearance preferences
+are app settings, separate from board content.
+
+On upgrade from v0.1.0, preserve the existing single board as one board in the
+collection. Preserve its images, transforms, stacking order, and both viewports.
+Name the migrated board `Board 1` and make it the initial active board. Migration
+must be safe to retry and must not produce duplicate boards or discard the
+original data after a failure.
+If migration cannot complete, preserve the original board and assets, show an
+error with a retry action, and prevent board editing until migration succeeds.
+Do not present an empty replacement board or treat the incomplete migration as
+successful.
+
+Continue atomic saves and recovery reporting. A failed save or deletion must not
+be reported as successful. Asset cleanup must respect board ownership and must
+never remove another board's assets. An unsupported future storage format must
+not be overwritten.
+
+The storage schema and component changes will be decided during implementation.
+The canvas and image pipeline must remain usable by both hosts without duplicating
+their gesture or rendering behavior.
+
+### About section
+
+Provide a small About section showing the app name, `easlie`, and the installed
+app's current version. Obtain the displayed version from the build's version
+metadata so future releases do not require a separate hardcoded About version.
+
+Its location and presentation will be decided during the full-screen redesign.
+
+### Appearance settings
+
+Provide three appearance choices: Light, Dark, and Use system default. Use system
+default is the initial choice when the user has not set a preference.
+
+Light and Dark remain in effect independently of the system theme. Use system
+default follows the system's current light or dark appearance and updates when
+that appearance changes.
+
+Persist the preference across app restarts. Apply it consistently to full-screen
+and floating-board app surfaces, controls, selection feedback, and dialogs.
+Changing the preference must not require reopening the app or board.
+
+The setting is global. Switching boards must not change it. Image content retains
+its original colors; changing the theme must not modify imported images.
+
+### Reliability and responsiveness
+
+The new features must preserve usable pan, zoom, image manipulation, and floating
+window resizing with a representative board of 20 to 30 real reference images.
+Image decoding must remain off the main thread. Validate responsiveness through
+functional checks; v0.2.0 does not require profiling or performance measurements.
+
+Switching or deleting boards must release resources that are no longer needed.
+Repeated board switches and floating-mode transitions must not leave stale board
+content, duplicate windows, stale notifications, or ongoing services after closure.
+
+Permission denial must leave full-screen mode usable. Returning from floating mode
+must preserve the active board and its separate viewports. Recovery errors must
+identify the affected board without changing unaffected boards.
+
+### v0.2.0 completion criteria
+
+1. The lead accepts the full-screen and floating-board redesigns implemented through
+   issues #19 and #20. Record design decisions and assess selecting and deselecting
+   images, opening another board, entering floating mode, and distinguishing window
+   movement and resizing from canvas manipulation.
+2. In both modes, a drag over an unselected image or overlapping unselected images
+   pans the canvas. A tap still selects the topmost image. Selected-image movement,
+   resizing, and rotation continue to work. Explicit deselection works when the
+   selected image fills the visible canvas.
+3. Fresh canvas pinch gestures work over images without accidentally selecting or
+   transforming them. A second finger during image manipulation does not start
+   canvas manipulation. A second finger on a resize corner during an image drag
+   permits resizing with both fingers, preserving aspect ratio and a fixed center.
+   One-finger corner resizing still preserves the opposite corner. Verify that
+   interruption retains the last displayed transform and ends the gesture.
+4. Attempt one-finger canvas panning after lifting one finger from a canvas pinch.
+   Record whether it works without jumps or unintended image manipulation. If it
+   causes buggy controls, document its omission and verify that a fresh gesture
+   after lifting all fingers works. Omission does not block release.
+5. Create and rename boards with unique visible names. Request an existing name
+   and verify numbered suffixes, including an already-used `(2)` suffix. Relaunch
+   to verify names and ordering by most recently opened. Renaming preserves board
+   identity, content, viewports, and ongoing import destinations.
+6. Create at least two boards and import the same source image into each. Edit images
+   and viewports independently. Switching, relaunching, and rebooting preserve each
+   board's own state.
+7. Delete an image or an entire board without changing another board's images or
+   viewports. Canceling board deletion leaves its contents intact. Deleting the last
+   board leaves a usable board-management state. A missing saved active board returns
+   to board management with a message instead of selecting or recreating a board.
+8. Close the app with an active board, then share images into easlie. The import
+   targets the saved active board. Start another import, then switch boards. Its
+   result belongs only to its original destination. Deleting that destination during
+   import does not recreate it.
+9. Exercise partial imports with successful images, retryable failures, and invalid
+   or unsupported images. Successful imports remain; retry affects only eligible
+   failures in the original board without duplicates. Invalid or unsupported images
+   receive the usual error. A deleted destination cannot be retried or recreated.
+10. Upgrade an existing v0.1.0 installation without losing its board, images,
+    transforms, stacking order, or viewports. The migrated board is named `Board 1`
+    and is initially active. A failed migration preserves the original data, reports
+    the error, and offers retry before editing. Retrying does not duplicate the board.
+11. About displays `easlie` and the installed build's version.
+12. Light, Dark, and Use system default work in both modes. The preference survives
+    relaunch, follows system changes when appropriate, and leaves image colors intact.
+13. Check functional responsiveness with 20 to 30 representative images and repeated
+    board switches and floating-mode transitions. Verify resource cleanup, permission
+    denial, independent viewports, and clean service, window, and notification closure.
+    Document automated validation separately from the lead's device smoke tests.
+    Profiling, performance measurements, and benchmark comparisons are not required.
+
+## v0.3.0 requirements
+
+### Automatic image snapping
+
+#### Required behavior
+
+Moving or resizing an image close to another image's edge or corner automatically
+snaps it as soon as the snapping conditions are met, even while the user is still
+dragging the image or its resize handle. Rotating an image near 0°, 90°, 180°, or
+270° automatically snaps its angle during the rotation gesture.
+
+Snapping must not wait for the image to stop moving or for the user to lift their
+finger. No button, modifier, or separate mode is required. Snapping must work in
+full-screen and floating modes. Image-to-image snapping only considers images in
+the active board.
+
+Image-to-image snapping during movement or resizing is eligible only when both
+images are at one of 0°, 90°, 180°, or 270°, with equivalent full-turn angles
+normalized. Their rotations do not need to match: an image at 0° can snap to one
+at 90°. Arbitrary rotations remain allowed, but those images do not participate
+in image-to-image snapping. Moving or resizing must not automatically rotate an
+image to make it eligible.
+
+Move snapping changes only the selected image's position. Resize snapping changes
+its dimensions while preserving its aspect ratio and the gesture's anchor. Keep
+the opposite corner fixed for one-finger corner resizing and the center fixed
+for two-finger resizing. Rotation snapping changes only its angle, keeping its
+center and size unchanged. No snapping operation changes the target image,
+stacking order, or creates a lasting link between images. Save the resulting transform like any
+other image manipulation.
+
+The user must remain able to overlap images. Continuing to drag must release a
+snap and allow the image to move through or over its target. Continuing a resize
+or rotation gesture must likewise release the snap and permit free manipulation.
+Snapping must not act as collision detection or prohibit overlap.
+
+Show temporary visual feedback identifying the active alignment. Snapping
+feedback must remain visible in both light and dark themes and follow the global
+appearance preference. Remove that feedback when the snap releases or the gesture
+ends. Panning or zooming the canvas must never snap or move images.
+
+#### Proposed snapping rules
+
+The following rules are a proposed starting point for implementation, subject to
+the lead's final design decision. [OPINION]
+
+Apply image-to-image snapping during selected-image move and resize gestures.
+Apply quarter-turn angle snapping during rotation gestures, independently of
+whether another image is nearby.
+
+Use the images' actual transformed corners and finite edge segments. Do not use
+invisible extensions of an edge or the axis-aligned bounding box of a rotated image.
+
+Support corner-to-corner snapping, corner-to-edge snapping in either direction,
+and edge-to-edge alignment. Corner-to-edge snapping uses the nearest point on the
+finite edge. Edge-to-edge snapping applies only to parallel edges whose projected
+lengths overlap. It permits both adjacent placement and aligned overlapping edges.
+No angle adjustment is applied to make nonparallel edges eligible.
+
+For movement, acquire a snap when the required positional correction is at most
+8 dp in screen space. Convert that distance through the current viewport zoom so
+the visible activation distance stays consistent at different zoom levels and
+display densities.
+
+For one-finger corner resizing, consider only alignments achievable by scaling
+the image with its aspect ratio and opposite corner preserved. Acquire a snap
+when the correction to the dragged corner is at most 8 dp in screen space. Skip alignments that would
+require stretching the image or moving its fixed corner. Release when the freely
+resized corner would require more than 12 dp of correction.
+
+Choose the eligible alignment requiring the smallest positional correction. For
+equal corrections, prefer corner-to-corner, then edge-to-edge, then corner-to-edge.
+Resolve remaining ties by stable image and feature identities. Apply one alignment
+at a time so competing targets do not pull the image in different directions.
+
+Retain the current alignment until the unsnapped position would require more than
+12 dp of correction. For movement, measure this from the position implied by the
+original drag and total finger movement, rather than accumulating movement from
+snapped positions. For one-finger corner resizing, use the corner position implied
+by the original resize gesture without snapping. This separates acquisition and
+release distances and avoids repeated switching at the threshold.
+
+After release, suppress that same alignment until the unsnapped position has left
+its 12 dp release region. It may be acquired again only after re-entry within 8 dp.
+Continuing through the target therefore releases the snap without another button.
+Other eligible alignments may still snap under the same rules.
+
+For rotation, acquire the nearest quarter-turn angle when the freely rotated
+angle is within 3° of it. Retain that angle until the free angle is more than 5°
+away. Use the shortest angular distance, including across the 360°/0° boundary.
+Track the free angle from the original gesture, rather than from the snapped angle.
+After release, reacquire that angle only after re-entry within 3°.
+
+Use the unsnapped transform to evaluate new candidates throughout each gesture.
+Apply an eligible snap immediately and show the snapped transform while the finger
+is still down. On finger release, keep and save the displayed position, dimensions,
+and angle, whether snapped or free. Finger release ends the gesture; it does not
+trigger snapping.
+Remove the temporary snap relationship so later movement of either image does not
+affect the other.
+
+Before implementing v0.3.0, decide whether fully hidden images participate as
+snapping targets and how to permit small intentional offsets within the activation
+distance. Also define candidate corrections and screen-space acquisition and
+release distances for centered two-finger resizing. The one-finger resize rules
+above must not move the fixed center of a two-finger resize. These choices remain
+open for the lead; the current proposal does not settle them.
+
+These thresholds and tie-breaking rules are proposals, not measurements of user
+preference. Any adjustment must retain automatic activation during gestures,
+consistent screen-space distances for movement and resizing, deterministic target
+selection, quarter-turn rotation snapping, and free overlap.
+
+### v0.3.0 completion criteria
+
+1. Move and resize images near eligible corners and edges in both modes. Snapping
+   activates during the gesture, shows feedback visible in light and dark themes,
+   and selects targets deterministically. Resizing preserves aspect ratio and the
+   relevant anchor: the opposite corner for one-finger resizing or the center for
+   two-finger resizing. Verify the chosen thresholds at different zoom levels.
+   Image-to-image snapping works only when both images have quarter-turn rotations,
+   including when their rotations differ.
+2. Rotate images near 0°, 90°, 180°, and 270° in both modes. Angle snapping activates
+   during rotation, including across 360°/0°. Continue movement, resizing, and rotation
+   past their release thresholds to manipulate images freely and preserve overlap.
+   Ending a gesture saves its displayed transform. Later edits to either image do
+   not transform the other.
+3. Snapping does not introduce interaction-blocking work during a drag, affect another
+   board, or interfere with canvas gestures. Existing v0.2.0 behavior continues to work.
