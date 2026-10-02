@@ -14,9 +14,14 @@ import java.io.IOException;
 
 /** Test APK only. Uses framework classes because the provider runs outside instrumentation. */
 public class IntakeTestProvider extends ContentProvider {
+    private volatile boolean holdReads;
+    private volatile boolean readStarted;
     @Override public boolean onCreate() { return true; }
 
     @Override public Bundle call(String method, String arg, Bundle extras) {
+        if ("hold-reads".equals(method)) { holdReads = true; readStarted = false; return Bundle.EMPTY; }
+        if ("release-reads".equals(method)) { holdReads = false; return Bundle.EMPTY; }
+        if ("read-started".equals(method)) { Bundle result = new Bundle(); result.putBoolean("started", readStarted); return result; }
         boolean clipping = "create-clipping-fixture".equals(method);
         if (!clipping && !"create-task-fixtures".equals(method)) return super.call(method, arg, extras);
         Bitmap image = Bitmap.createBitmap(100, 50, Bitmap.Config.ARGB_8888);
@@ -46,6 +51,14 @@ public class IntakeTestProvider extends ContentProvider {
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         String name = uri.getLastPathSegment();
         if (name == null || !name.matches("[a-zA-Z0-9.-]+") || name.equals(".") || name.equals("..")) throw new FileNotFoundException("Invalid fixture name");
+        if (mode.equals("r") && holdReads) {
+            readStarted = true;
+            long deadline = android.os.SystemClock.uptimeMillis() + 10000;
+            while (holdReads && android.os.SystemClock.uptimeMillis() < deadline) {
+                android.os.SystemClock.sleep(10);
+            }
+            if (holdReads) throw new FileNotFoundException("Timed out waiting for fixture release");
+        }
         return ParcelFileDescriptor.open(new File(getContext().getFilesDir(), name), ParcelFileDescriptor.parseMode(mode));
     }
 

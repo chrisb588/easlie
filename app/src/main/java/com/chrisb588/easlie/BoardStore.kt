@@ -69,7 +69,13 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     private val canvasOwners = mutableListOf<Any>()
     private var activeCanvasOwner by mutableStateOf<Any?>(null)
     private val mutex = Mutex()
-    private data class PendingImport(val resolver: ContentResolver, val uris: List<Uri>, val destination: String?)
+    private data class PendingImport(
+        val resolver: ContentResolver,
+        val uris: List<Uri>,
+        val destination: String?,
+        val viewport: CanvasViewport?,
+        val size: CanvasSize,
+    )
     private val pending = ArrayDeque<PendingImport>()
     private var writable by mutableStateOf(true)
     private var dirty = false
@@ -305,7 +311,7 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
 
     fun enqueueImport(resolver: ContentResolver, uris: List<Uri>) {
         if (uris.isEmpty()) return
-        pending.addLast(PendingImport(resolver, uris, activeBoardId))
+        pending.addLast(PendingImport(resolver, uris, activeBoardId, if (canEdit) viewport else null, windowSize))
         startPendingImports()
     }
 
@@ -328,8 +334,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     val destinationStorage = if (collectionStorage != null && destination != null) {
                         BoardStorage(collectionStorage.directoryFor(destination))
                     } else storage
-                    val importViewport = viewport
-                    val importSize = windowSize
+                    val importViewport = request.viewport ?: viewport
+                    val importSize = request.size.takeIf { it.width > 0f && it.height > 0f } ?: windowSize
                     var accepted = 0
                     var rejected = 0
                     for (uri in uris) {

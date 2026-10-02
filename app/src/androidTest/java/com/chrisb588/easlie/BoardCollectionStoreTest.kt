@@ -1,5 +1,7 @@
 package com.chrisb588.easlie
 
+import android.net.Uri
+import com.chrisb588.easlie.canvas.CanvasSize
 import androidx.test.platform.app.InstrumentationRegistry
 import com.chrisb588.easlie.canvas.CanvasPoint
 import com.chrisb588.easlie.canvas.CanvasViewport
@@ -62,4 +64,52 @@ class BoardCollectionStoreTest {
             main { store.releaseImages() }
         } finally { root.deleteRecursively() }
     }
+    @Test fun importCompletionAfterSwitchKeepsOriginalDestinationAndIndependentCopies() {
+        val context = instrumentation.targetContext
+        val resolver = context.contentResolver
+        val provider = Uri.parse("content://com.chrisb588.easlie.test.images")
+        val source = Uri.withAppendedPath(provider, "task-first.png")
+        resolver.call(provider, "create-task-fixtures", null, null)
+        val root = File(context.cacheDir, "collection-${UUID.randomUUID()}")
+        lateinit var store: BoardStore
+        try {
+            main { store = BoardStore(File(root, "board"), collectionMigration = true) }
+            await { store.collectionReady }
+            main { store.resizeWindow(CanvasSize(600f, 400f)); store.createBoard("First") }
+            await { store.activeBoardId != null }
+            lateinit var first: String
+            main { first = store.activeBoardId!! }
+            resolver.call(provider, "hold-reads", null, null)
+            main { store.enqueueImport(resolver, listOf(source)) }
+            val deadline = android.os.SystemClock.uptimeMillis() + 5000
+            while (resolver.call(provider, "read-started", null, null)?.getBoolean("started") != true) {
+                check(android.os.SystemClock.uptimeMillis() < deadline) { "Import did not begin copying" }
+                Thread.sleep(20)
+            }
+            main { store.createBoard("Second") }
+            await { store.activeBoardId != first }
+            lateinit var second: String
+            main { second = store.activeBoardId!!; assertTrue(store.items.isEmpty()) }
+            resolver.call(provider, "release-reads", null, null)
+            await { !store.importing }
+            main { assertEquals(second, store.activeBoardId); assertTrue(store.items.isEmpty()); store.enqueueImport(resolver, listOf(source)) }
+            await { !store.importing && store.items.size == 1 }
+            val firstStorage = BoardStorage(File(root, "boards/$first"))
+            val secondStorage = BoardStorage(File(root, "boards/$second"))
+            val firstItem = firstStorage.load().snapshot.items.single()
+            val secondItem = secondStorage.load().snapshot.items.single()
+            assertNotEquals(firstItem.id, secondItem.id)
+            assertNotEquals(firstItem.assetId, secondItem.assetId)
+            assertNotEquals(firstStorage.asset(firstItem.assetId), secondStorage.asset(secondItem.assetId))
+            assertArrayEquals(firstStorage.asset(firstItem.assetId).readBytes(), secondStorage.asset(secondItem.assetId).readBytes())
+            main { store.openBoard(first) }
+            await { store.activeBoardId == first && store.items.size == 1 }
+            main { assertEquals(firstItem, store.items.single()); store.releaseImages() }
+        } finally {
+            resolver.call(provider, "release-reads", null, null)
+            resolver.delete(source, null, null)
+            root.deleteRecursively()
+        }
+    }
+
 }
