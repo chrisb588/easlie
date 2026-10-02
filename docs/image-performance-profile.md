@@ -48,4 +48,26 @@ Do not substitute synthetic images or emulator readings for the physical tablet 
 
 Only propose tier or budget values after comparing repeatable before/after runs on the same tablet and image set. Record whether improvement in one metric worsens memory, frame timing, or image clarity.
 
+## Automated baseline capture
+
+`RealBoardProfileTest` is opt-in and skips itself in the ordinary connected-test suite. It uses the existing physical-tablet board. Back up the board before running it, grant easlie's floating-board permission through Android Settings, and leave the tablet available to the workload. Do not use the tablet during capture. Normal teardown removes only the temporary imported items and restores the original items and both saved viewports. Process death can prevent teardown; retain the external backup until restoration is verified.
+
+```sh
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+adb -s DEVICE exec-out run-as com.chrisb588.easlie tar -cf - files/board > /tmp/easlie-board-backup.tar
+adb -s DEVICE install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s DEVICE install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+python tools/profile_board.py --serial DEVICE --output /tmp/easlie-profile --seconds 120 --repetitions 3 --interval 0.5
+```
+
+The output directory must be new. It contains local raw memory/frame captures, filtered logs, build/APK metadata, thermal state, clock calibration, and `summary.json`. These captures contain device identifiers; publish only the anonymized inventory and measurement summary. The script does not copy image content. `--skip-floating` explicitly records a partial full-screen/cache run when overlay permission is unavailable. `--floating-only` records the floating workload separately. `--seconds 5 --repetitions 1` checks the harness; it is not the sustained profiling run. `--summarize` regenerates a summary from an existing capture without touching the tablet.
+
+The automated workload changes the real board's viewport on the main thread, imports batches of three actual source images through the normal importer, and injects touch drags into the actual floating window's resize handle. It bypasses canvas gesture recognition. Each floating round returns to the full-screen host. Repetitions within one invocation share a process; run independent invocations as well when comparing retained memory or alternative production policies. Human interaction and visual-quality checks remain part of the lead's smoke test.
+
+After the host workloads, a separate renderer-only experiment compares memory-class/16, /8, and /4 cache budgets on the same real sources and a fixed 2560 × 1444 pixel viewport. It does not draw frames. Its fixed viewport must be recorded separately from the measured host window sizes. Run order, heap retention, canceled decodes, and warm file caches can affect results; this experiment alone cannot select a production budget.
+
+Memory is sampled at the configured interval, so reported peak PSS is the largest observed sample, not an exact allocation peak. Frame duration is `FrameCompleted - IntendedVsync` for completed rows with zero flags. Frame rows are deduplicated by window and intended-vsync timestamp and attributed using device monotonic stage markers. The bounded `gfxinfo` history can still omit frames between polls. The summary reports durations above 16.67 ms as a fixed 60 Hz comparison threshold and above 700 ms as frozen frames; the tablet may have a higher refresh rate. Host/tablet epoch clock calibration aligns memory samples with log markers and records its round-trip uncertainty. Decode durations exclude queue time and canceled jobs. Cache hit ratios count refresh observations, not unique decode requests. Cache occupancy is also sampled from log snapshots.
+
+The initial measured continuation is documented in [the supplied-board baseline](image-performance-baseline.md). Its source limitations and remaining acceptance criteria must stay visible until the representative high-resolution run and measured policy choice are complete.
+
 Android references: [dumpsys memory and frame commands](https://developer.android.com/tools/dumpsys), [inspect system trace frame and memory tracks](https://developer.android.com/studio/profile/inspect-traces), and [UI jank detection](https://developer.android.com/studio/profile/jank-detection).

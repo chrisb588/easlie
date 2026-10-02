@@ -35,6 +35,8 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, pr
     private var requested = emptyMap<String, RenderRequest>()
     private val profileCounters = ImageProfileCounters()
     private var refreshes = 0L
+    private var visibleCount = 0
+    private var nearbyCount = 0
     var images by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
         private set
 
@@ -42,6 +44,8 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, pr
         size: CanvasSize, density: Float) {
         val visible = items.filter { it.intersects(viewport, size, 24f * density) }
         val nearby = items.filter { it !in visible && it.intersects(viewport, size, 128f * density) }
+        visibleCount = visible.size
+        nearbyCount = nearby.size
         val demands = (visible + nearby).mapNotNull { item ->
             val source = sources[item.id] ?: return@mapNotNull null
             val onScreen = item in visible
@@ -71,7 +75,7 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, pr
         }
         startDecodes(sources)
         if (profile && ++refreshes % 100L == 0L) {
-            Log.d("EaslieImageProfile", "refreshes=$refreshes ${profileCounters.snapshot()} cache_bytes=${cache.sizeBytes} budget_bytes=${cache.budget} visible=${visible.size} nearby=${nearby.size}")
+            logProfile()
         }
     }
 
@@ -128,6 +132,12 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, pr
             }
             jobs[demand.id] = demand.sample to job
         }
+
+    }
+
+    /** Capture short workloads too; periodic logging alone can miss their final counters. */
+    fun logProfile() {
+        if (profile) Log.d("EaslieImageProfile", "refreshes=$refreshes ${profileCounters.snapshot()} cache_bytes=${cache.sizeBytes} budget_bytes=${cache.budget} visible=$visibleCount nearby=$nearbyCount")
     }
 
     fun remove(id: String) {

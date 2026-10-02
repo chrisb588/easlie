@@ -214,6 +214,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
 
     fun releaseImages() { renderer.clear() }
 
+    internal fun logImageProfile() { renderer.logProfile() }
+
     fun enqueueImport(resolver: ContentResolver, uris: List<Uri>) {
         if (uris.isEmpty()) return
         pending.addLast(resolver to uris)

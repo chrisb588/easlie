@@ -1,0 +1,821 @@
+{
+  "metadata": {
+    "seconds": 30,
+    "repetitions": 3,
+    "interval_seconds": 0.5,
+    "floating_requested": false,
+    "commit": "532d579796fa530a2b69a1e4745d0d6bd7d42012",
+    "dirty": true,
+    "apk_sha256": {
+      "app/build/outputs/apk/debug/app-debug.apk": "a63bbd41d696bfbea3abb9fa4e7c8ab6b0b5c799f4becaaee7d2becd776be9d4",
+      "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "23629943e1eca64a2ad051cab25e937245dcd2bc1fe93fca934522dce8f2c842"
+    }
+  },
+  "clock": {
+    "offset_seconds": -44.58700728416443,
+    "uncertainty_seconds": 0.017101526260375977
+  },
+  "measurements": {
+    "stages": [
+      {
+        "stage": "pan",
+        "repeat": 1,
+        "start": 1790939748.017,
+        "start_ns": 11737905911487,
+        "end": 1790939779.028,
+        "end_ns": 11768916885273,
+        "peak_sample": {
+          "timestamp": 1790939749.17211,
+          "Java Heap": 12836,
+          "Native Heap": 57068,
+          "Graphics": 45522,
+          "TOTAL PSS": 200758
+        },
+        "memory_samples": 62,
+        "frames": {
+          "count": 1684,
+          "over_16_67_ms": 6,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 11.6600973,
+          "worst_ms": 20.537559
+        },
+        "decode": {
+          "count": 53,
+          "median_ms": 10.0,
+          "p95_ms": 18.0,
+          "max_ms": 27,
+          "sample_factors": {
+            "2": 36,
+            "4": 17
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 48400,
+          "refresh_misses": 188,
+          "decodes_scheduled": 53,
+          "end_bytes": 10835608,
+          "max_observed_bytes": 11558360,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.996130731867951
+        }
+      },
+      {
+        "stage": "zoom",
+        "repeat": 1,
+        "start": 1790939779.029,
+        "start_ns": 11768918075119,
+        "end": 1790939810.046,
+        "end_ns": 11799935178250,
+        "peak_sample": {
+          "timestamp": 1790939797.185678,
+          "Java Heap": 13068,
+          "Native Heap": 94852,
+          "Graphics": 93714,
+          "TOTAL PSS": 287869
+        },
+        "memory_samples": 62,
+        "frames": {
+          "count": 1996,
+          "over_16_67_ms": 12,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 10.94215175,
+          "worst_ms": 24.770243
+        },
+        "decode": {
+          "count": 992,
+          "median_ms": 8.0,
+          "p95_ms": 18.0,
+          "max_ms": 42,
+          "sample_factors": {
+            "1": 129,
+            "2": 389,
+            "4": 384,
+            "8": 90
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 12518,
+          "refresh_misses": 3624,
+          "decodes_scheduled": 1048,
+          "end_bytes": 14430296,
+          "max_observed_bytes": 16072216,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.7754925040267625
+        }
+      },
+      {
+        "stage": "import",
+        "repeat": 1,
+        "start": 1790939810.047,
+        "start_ns": 11799935963827,
+        "end": 1790939811.419,
+        "end_ns": 11801308176826,
+        "peak_sample": {
+          "timestamp": 1790939810.689477,
+          "Java Heap": 12608,
+          "Native Heap": 36740,
+          "Graphics": 44902,
+          "TOTAL PSS": 180464
+        },
+        "memory_samples": 3,
+        "frames": {
+          "count": 7,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 15.6110199,
+          "worst_ms": 15.633735
+        },
+        "decode": {
+          "count": 3,
+          "median_ms": 6.0,
+          "p95_ms": 24.9,
+          "max_ms": 27,
+          "sample_factors": {
+            "2": 3
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 156,
+          "refresh_misses": 3,
+          "decodes_scheduled": 3,
+          "end_bytes": 14430296,
+          "max_observed_bytes": 14430296,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.9811320754716981
+        }
+      },
+      {
+        "stage": "pan",
+        "repeat": 2,
+        "start": 1790939812.428,
+        "start_ns": 11802316620095,
+        "end": 1790939843.433,
+        "end_ns": 11833322276227,
+        "peak_sample": {
+          "timestamp": 1790939840.1984818,
+          "Java Heap": 12812,
+          "Native Heap": 40424,
+          "Graphics": 58186,
+          "TOTAL PSS": 197640
+        },
+        "memory_samples": 62,
+        "frames": {
+          "count": 1676,
+          "over_16_67_ms": 8,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 11.81223,
+          "worst_ms": 19.982732
+        },
+        "decode": {
+          "count": 19,
+          "median_ms": 14.0,
+          "p95_ms": 27.699999999999985,
+          "max_ms": 34,
+          "sample_factors": {
+            "2": 19
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 48708,
+          "refresh_misses": 29,
+          "decodes_scheduled": 19,
+          "end_bytes": 13745752,
+          "max_observed_bytes": 14468504,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.9994049695303363
+        }
+      },
+      {
+        "stage": "zoom",
+        "repeat": 2,
+        "start": 1790939843.434,
+        "start_ns": 11833322569150,
+        "end": 1790939874.45,
+        "end_ns": 11864338902320,
+        "peak_sample": {
+          "timestamp": 1790939869.7111068,
+          "Java Heap": 13236,
+          "Native Heap": 89148,
+          "Graphics": 93598,
+          "TOTAL PSS": 282311
+        },
+        "memory_samples": 62,
+        "frames": {
+          "count": 2009,
+          "over_16_67_ms": 14,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 11.6881308,
+          "worst_ms": 26.004445
+        },
+        "decode": {
+          "count": 987,
+          "median_ms": 8.0,
+          "p95_ms": 20.0,
+          "max_ms": 50,
+          "sample_factors": {
+            "1": 127,
+            "2": 386,
+            "4": 383,
+            "8": 91
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 12603,
+          "refresh_misses": 3582,
+          "decodes_scheduled": 1051,
+          "end_bytes": 14430296,
+          "max_observed_bytes": 16442304,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.7786839666357739
+        }
+      },
+      {
+        "stage": "import",
+        "repeat": 2,
+        "start": 1790939874.45,
+        "start_ns": 11864339376243,
+        "end": 1790939875.658,
+        "end_ns": 11865547203742,
+        "peak_sample": {
+          "timestamp": 1790939874.712448,
+          "Java Heap": 12824,
+          "Native Heap": 38268,
+          "Graphics": 46898,
+          "TOTAL PSS": 184343
+        },
+        "memory_samples": 2,
+        "frames": {
+          "count": 6,
+          "over_16_67_ms": 1,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 22.484495,
+          "worst_ms": 24.942099
+        },
+        "decode": {
+          "count": 3,
+          "median_ms": 9.0,
+          "p95_ms": 11.7,
+          "max_ms": 12,
+          "sample_factors": {
+            "2": 2,
+            "4": 1
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 156,
+          "refresh_misses": 3,
+          "decodes_scheduled": 3,
+          "end_bytes": 14430296,
+          "max_observed_bytes": 14430296,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.9811320754716981
+        }
+      },
+      {
+        "stage": "pan",
+        "repeat": 3,
+        "start": 1790939876.665,
+        "start_ns": 11866553948011,
+        "end": 1790939907.679,
+        "end_ns": 11897568229142,
+        "peak_sample": {
+          "timestamp": 1790939877.213289,
+          "Java Heap": 12752,
+          "Native Heap": 50672,
+          "Graphics": 51166,
+          "TOTAL PSS": 200919
+        },
+        "memory_samples": 62,
+        "frames": {
+          "count": 1682,
+          "over_16_67_ms": 1,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 11.827065949999998,
+          "worst_ms": 16.847285
+        },
+        "decode": {
+          "count": 19,
+          "median_ms": 14.0,
+          "p95_ms": 24.099999999999977,
+          "max_ms": 34,
+          "sample_factors": {
+            "2": 19
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 48821,
+          "refresh_misses": 25,
+          "decodes_scheduled": 19,
+          "end_bytes": 13745752,
+          "max_observed_bytes": 14468504,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.9994881873643696
+        }
+      },
+      {
+        "stage": "zoom",
+        "repeat": 3,
+        "start": 1790939907.68,
+        "start_ns": 11897568705988,
+        "end": 1790939938.696,
+        "end_ns": 11928584864389,
+        "peak_sample": {
+          "timestamp": 1790939927.2325292,
+          "Java Heap": 12848,
+          "Native Heap": 82076,
+          "Graphics": 102706,
+          "TOTAL PSS": 283922
+        },
+        "memory_samples": 62,
+        "frames": {
+          "count": 2009,
+          "over_16_67_ms": 15,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 11.796787999999996,
+          "worst_ms": 25.65348
+        },
+        "decode": {
+          "count": 988,
+          "median_ms": 8.0,
+          "p95_ms": 20.0,
+          "max_ms": 38,
+          "sample_factors": {
+            "1": 130,
+            "2": 385,
+            "4": 382,
+            "8": 91
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 12772,
+          "refresh_misses": 3468,
+          "decodes_scheduled": 1049,
+          "end_bytes": 16424368,
+          "max_observed_bytes": 16887144,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.7864532019704433
+        }
+      },
+      {
+        "stage": "import",
+        "repeat": 3,
+        "start": 1790939938.696,
+        "start_ns": 11928585535851,
+        "end": 1790939939.938,
+        "end_ns": 11929826641811,
+        "peak_sample": {
+          "timestamp": 1790939939.2361362,
+          "Java Heap": 12436,
+          "Native Heap": 39048,
+          "Graphics": 48618,
+          "TOTAL PSS": 186458
+        },
+        "memory_samples": 3,
+        "frames": {
+          "count": 9,
+          "over_16_67_ms": 1,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 18.4501052,
+          "worst_ms": 20.570844
+        },
+        "decode": {
+          "count": 3,
+          "median_ms": 11.0,
+          "p95_ms": 16.4,
+          "max_ms": 17,
+          "sample_factors": {
+            "2": 2,
+            "4": 1
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 156,
+          "refresh_misses": 3,
+          "decodes_scheduled": 3,
+          "end_bytes": 16424368,
+          "max_observed_bytes": 16424368,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.9811320754716981
+        }
+      },
+      {
+        "stage": "cache-16",
+        "repeat": 1,
+        "start": 1790939940.463,
+        "start_ns": 11930352209234,
+        "end": 1790939972.475,
+        "end_ns": 11962363962480,
+        "peak_sample": {
+          "timestamp": 1790939940.7371366,
+          "Java Heap": 12160,
+          "Native Heap": 74592,
+          "Graphics": 25292,
+          "TOTAL PSS": 198831
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 566,
+          "median_ms": 9.0,
+          "p95_ms": 28.0,
+          "max_ms": 46,
+          "sample_factors": {
+            "1": 47,
+            "2": 217,
+            "4": 267,
+            "8": 35
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 27782,
+          "refresh_misses": 2647,
+          "decodes_scheduled": 615,
+          "end_bytes": 8800536,
+          "max_observed_bytes": 12745572,
+          "budget_bytes": 16777216,
+          "refresh_hit_ratio": 0.913010614873969
+        }
+      },
+      {
+        "stage": "cache-16",
+        "repeat": 2,
+        "start": 1790939972.482,
+        "start_ns": 11962371109904,
+        "end": 1790940004.514,
+        "end_ns": 11994402781650,
+        "peak_sample": {
+          "timestamp": 1790939984.7548494,
+          "Java Heap": 11828,
+          "Native Heap": 65696,
+          "Graphics": 664,
+          "TOTAL PSS": 164617
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 576,
+          "median_ms": 9.0,
+          "p95_ms": 27.0,
+          "max_ms": 73,
+          "sample_factors": {
+            "1": 47,
+            "2": 224,
+            "4": 272,
+            "8": 33
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 27991,
+          "refresh_misses": 2868,
+          "decodes_scheduled": 629,
+          "end_bytes": 8489208,
+          "max_observed_bytes": 11934296,
+          "budget_bytes": 16777216,
+          "refresh_hit_ratio": 0.907061149097508
+        }
+      },
+      {
+        "stage": "cache-16",
+        "repeat": 3,
+        "start": 1790940004.521,
+        "start_ns": 11994409942227,
+        "end": 1790940036.543,
+        "end_ns": 12026432268973,
+        "peak_sample": {
+          "timestamp": 1790940016.7692046,
+          "Java Heap": 11808,
+          "Native Heap": 65380,
+          "Graphics": 664,
+          "TOTAL PSS": 164033
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 556,
+          "median_ms": 10.0,
+          "p95_ms": 31.25,
+          "max_ms": 62,
+          "sample_factors": {
+            "1": 46,
+            "2": 208,
+            "4": 267,
+            "8": 35
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 28199,
+          "refresh_misses": 3250,
+          "decodes_scheduled": 617,
+          "end_bytes": 7583192,
+          "max_observed_bytes": 12745572,
+          "budget_bytes": 16777216,
+          "refresh_hit_ratio": 0.8966580813380394
+        }
+      },
+      {
+        "stage": "cache-8",
+        "repeat": 1,
+        "start": 1790940036.549,
+        "start_ns": 12026438052550,
+        "end": 1790940068.565,
+        "end_ns": 12058454389758,
+        "peak_sample": {
+          "timestamp": 1790940054.7848108,
+          "Java Heap": 11812,
+          "Native Heap": 73600,
+          "Graphics": 664,
+          "TOTAL PSS": 172267
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 553,
+          "median_ms": 10.0,
+          "p95_ms": 31.0,
+          "max_ms": 51,
+          "sample_factors": {
+            "1": 75,
+            "2": 266,
+            "4": 186,
+            "8": 26
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 26997,
+          "refresh_misses": 4050,
+          "decodes_scheduled": 651,
+          "end_bytes": 15766188,
+          "max_observed_bytes": 20840800,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.8695526137791091
+        }
+      },
+      {
+        "stage": "cache-8",
+        "repeat": 2,
+        "start": 1790940068.572,
+        "start_ns": 12058461351181,
+        "end": 1790940100.602,
+        "end_ns": 12090490662273,
+        "peak_sample": {
+          "timestamp": 1790940086.7968915,
+          "Java Heap": 11840,
+          "Native Heap": 73820,
+          "Graphics": 664,
+          "TOTAL PSS": 172548
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 557,
+          "median_ms": 9.0,
+          "p95_ms": 31.199999999999932,
+          "max_ms": 60,
+          "sample_factors": {
+            "1": 76,
+            "2": 267,
+            "4": 189,
+            "8": 25
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 26784,
+          "refresh_misses": 4272,
+          "decodes_scheduled": 652,
+          "end_bytes": 17281612,
+          "max_observed_bytes": 18909868,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.8624420401854714
+        }
+      },
+      {
+        "stage": "cache-8",
+        "repeat": 3,
+        "start": 1790940100.608,
+        "start_ns": 12090497267735,
+        "end": 1790940132.638,
+        "end_ns": 12122526785443,
+        "peak_sample": {
+          "timestamp": 1790940111.306248,
+          "Java Heap": 11924,
+          "Native Heap": 72136,
+          "Graphics": 664,
+          "TOTAL PSS": 170952
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 564,
+          "median_ms": 10.0,
+          "p95_ms": 32.0,
+          "max_ms": 55,
+          "sample_factors": {
+            "1": 77,
+            "2": 273,
+            "4": 193,
+            "8": 21
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 26869,
+          "refresh_misses": 4240,
+          "decodes_scheduled": 651,
+          "end_bytes": 17281612,
+          "max_observed_bytes": 20804000,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.8637050371275193
+        }
+      },
+      {
+        "stage": "cache-4",
+        "repeat": 1,
+        "start": 1790940132.646,
+        "start_ns": 12122534999404,
+        "end": 1790940164.662,
+        "end_ns": 12154550849381,
+        "peak_sample": {
+          "timestamp": 1790940154.8239853,
+          "Java Heap": 11792,
+          "Native Heap": 86176,
+          "Graphics": 664,
+          "TOTAL PSS": 184736
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 526,
+          "median_ms": 10.0,
+          "p95_ms": 28.0,
+          "max_ms": 56,
+          "sample_factors": {
+            "1": 103,
+            "2": 228,
+            "4": 179,
+            "8": 16
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 26279,
+          "refresh_misses": 4683,
+          "decodes_scheduled": 686,
+          "end_bytes": 32136132,
+          "max_observed_bytes": 32136132,
+          "budget_bytes": 67108864,
+          "refresh_hit_ratio": 0.8487500807441379
+        }
+      },
+      {
+        "stage": "cache-4",
+        "repeat": 2,
+        "start": 1790940164.664,
+        "start_ns": 12154552954920,
+        "end": 1790940196.683,
+        "end_ns": 12186571697897,
+        "peak_sample": {
+          "timestamp": 1790940186.8383956,
+          "Java Heap": 11812,
+          "Native Heap": 91564,
+          "Graphics": 664,
+          "TOTAL PSS": 190216
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 552,
+          "median_ms": 10.0,
+          "p95_ms": 29.449999999999932,
+          "max_ms": 47,
+          "sample_factors": {
+            "1": 102,
+            "2": 245,
+            "4": 184,
+            "8": 21
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 26513,
+          "refresh_misses": 4530,
+          "decodes_scheduled": 683,
+          "end_bytes": 32136132,
+          "max_observed_bytes": 32136132,
+          "budget_bytes": 67108864,
+          "refresh_hit_ratio": 0.8540733820829173
+        }
+      },
+      {
+        "stage": "cache-4",
+        "repeat": 3,
+        "start": 1790940196.69,
+        "start_ns": 12186578651666,
+        "end": 1790940228.702,
+        "end_ns": 12218591210297,
+        "peak_sample": {
+          "timestamp": 1790940218.85189,
+          "Java Heap": 11820,
+          "Native Heap": 89112,
+          "Graphics": 664,
+          "TOTAL PSS": 187776
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 0,
+          "over_16_67_ms": 0,
+          "frozen_over_700_ms": 0,
+          "p95_ms": null,
+          "worst_ms": null
+        },
+        "decode": {
+          "count": 543,
+          "median_ms": 10.0,
+          "p95_ms": 32.0,
+          "max_ms": 47,
+          "sample_factors": {
+            "1": 100,
+            "2": 230,
+            "4": 192,
+            "8": 21
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 26480,
+          "refresh_misses": 4512,
+          "decodes_scheduled": 684,
+          "end_bytes": 32136132,
+          "max_observed_bytes": 32136132,
+          "budget_bytes": 67108864,
+          "refresh_hit_ratio": 0.8544140423335054
+        }
+      }
+    ],
+    "board_restored": true,
+    "oom": false,
+    "floating_skipped": true,
+    "limitations": "Sampled PSS is a lower bound on peak. gfxinfo ring buffers can omit frames. Programmatic viewport changes bypass gesture recognition. Cache experiments do not draw frames. Decode times omit canceled jobs and queue time. Debug/instrumentation/capture overhead is included."
+  }
+}
