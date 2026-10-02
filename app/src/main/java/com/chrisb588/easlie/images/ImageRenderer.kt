@@ -1,6 +1,9 @@
 package com.chrisb588.easlie.images
 
 import android.graphics.Bitmap
+import android.os.SystemClock
+import android.os.Trace
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -26,11 +29,15 @@ internal data class RenderRequest(val id: String, val tier: ResolutionTier) {
 private data class CachedImage(val sample: Int, val bitmap: Bitmap, val image: ImageBitmap)
 
 /** Main-thread ownership; only file decoding runs on IO. One decode bounds transient allocations. */
-internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
+internal class ImageRenderer(private val scope: CoroutineScope, budget: Long, private val profile: Boolean = false) {
     private val cache = ByteImageCache<String, CachedImage>(budget) { it.bitmap.allocationByteCount.toLong() }
     private val decoder = Semaphore(1)
     private val jobs = mutableMapOf<String, Pair<Int, Job>>()
     private var requested = emptyMap<String, RenderRequest>()
+    private val profileCounters = ImageProfileCounters()
+    private var refreshes = 0L
+    private var visibleCount = 0
+    private var nearbyCount = 0
     var images by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
         private set
 
@@ -38,6 +45,8 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
         size: CanvasSize, density: Float) {
         val visible = items.filter { it.intersects(viewport, size, 24f * density) }
         val nearby = items.filter { it !in visible && it.intersects(viewport, size, 128f * density) }
+        visibleCount = visible.size
+        nearbyCount = nearby.size
         val demands = (visible + nearby).mapNotNull { item ->
             val source = sources[item.id] ?: return@mapNotNull null
             val onScreen = item in visible
@@ -61,7 +70,17 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
             if (id !in requested) cache.remove(id)
         }
         publish()
+        if (profile) {
+            val observed = cache.snapshot()
+            demands.forEach { demand ->
+                if (observed[demand.id]?.sample == demand.sample) profileCounters.recordHit()
+                else profileCounters.recordMiss()
+            }
+        }
         startDecodes(sources)
+        if (profile && ++refreshes % 100L == 0L) {
+            logProfile()
+        }
     }
 
     private fun startDecodes(sources: Map<String, ImageSource>) {
@@ -75,15 +94,29 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
         for (demand in decodeOrder) {
             val old = cache[demand.id]
             if (old?.sample == demand.sample || jobs[demand.id]?.first == demand.sample) continue
+            if (profile) profileCounters.recordScheduled()
             val source = sources.getValue(demand.id)
             val job = scope.launch {
                 var decoded: Bitmap? = null
                 var admitted = false
                 try {
+                    var decodeMillis = 0L
                     // Queue on the main dispatcher so IO scheduling cannot reorder downsizes.
                     val bitmap = decoder.withPermit {
-                        withContext(Dispatchers.IO) { source.decode(demand.sample).also { decoded = it } }
+                        withContext(Dispatchers.IO) {
+                            val start = if (profile) SystemClock.elapsedRealtimeNanos() else 0L
+                            if (profile) Trace.beginSection("easlie.decode sample=${demand.sample} source_edge=${source.edge}")
+                            try {
+                                source.decode(demand.sample).also {
+                                    decoded = it
+                                    if (profile) decodeMillis = (SystemClock.elapsedRealtimeNanos() - start) / 1_000_000
+                                }
+                            } finally {
+                                if (profile) Trace.endSection()
+                            }
+                        }
                     }
+                    if (profile) Log.d("EaslieImageProfile", "decode_ms=$decodeMillis sample=${demand.sample} bytes=${bitmap.allocationByteCount} source_edge=${source.edge}")
                     if (requested[demand.id]?.sample == demand.sample) {
                         admitted = cache.put(demand.id, CachedImage(demand.sample, bitmap, bitmap.asImageBitmap()),
                             allowProtectedEviction = false)
@@ -94,7 +127,8 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (failure: Exception) {
+                    if (profile) Log.w("EaslieImageProfile", "decode_failed sample=${demand.sample}", failure)
                     // Keep the existing image if either an upgrade or downsize fails.
                 } finally {
                     decoded?.recycle() // Includes cancellation while returning from the IO dispatcher.
@@ -108,6 +142,11 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
         }
     }
 
+    /** Capture short workloads too; periodic logging alone can miss their final counters. */
+    fun logProfile() {
+        if (profile) Log.d("EaslieImageProfile", "refreshes=$refreshes ${profileCounters.snapshot()} cache_bytes=${cache.sizeBytes} budget_bytes=${cache.budget} visible=$visibleCount nearby=$nearbyCount")
+    }
+
     fun remove(id: String) {
         jobs.remove(id)?.second?.cancel()
         requested = requested - id
@@ -116,9 +155,12 @@ internal class ImageRenderer(private val scope: CoroutineScope, budget: Long) {
     }
 
     fun clear() {
-        jobs.values.forEach { it.second.cancel() }
+        val pending = jobs.values.map { it.second }
         jobs.clear()
         requested = emptyMap()
+        // Main-dispatcher cancellation can run finally immediately. Detach jobs
+        // and demands first so cleanup cannot mutate this iteration or retry work.
+        pending.forEach { it.cancel() }
         cache.snapshot().keys.forEach { cache.remove(it) }
         publish()
     }

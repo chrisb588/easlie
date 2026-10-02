@@ -1,0 +1,165 @@
+{
+  "metadata": {
+    "seconds": 30,
+    "repetitions": 3,
+    "interval_seconds": 0.5,
+    "floating_requested": true,
+    "floating_only": true,
+    "commit": "532d579796fa530a2b69a1e4745d0d6bd7d42012",
+    "dirty": true,
+    "apk_sha256": {
+      "app/build/outputs/apk/debug/app-debug.apk": "a63bbd41d696bfbea3abb9fa4e7c8ab6b0b5c799f4becaaee7d2becd776be9d4",
+      "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "454d335dc7bf6dbbe55c22efb1523178f48aa3a511937a202a38c9bbccb75d79"
+    }
+  },
+  "clock": {
+    "offset_seconds": -44.578940868377686,
+    "uncertainty_seconds": 0.035251617431640625
+  },
+  "measurements": {
+    "stages": [
+      {
+        "stage": "floating",
+        "repeat": 1,
+        "start": 1790940659.304,
+        "start_ns": 12649192363682,
+        "end": 1790940691.254,
+        "end_ns": 12681143066813,
+        "peak_sample": {
+          "timestamp": 1790940670.0110738,
+          "Java Heap": 13360,
+          "Native Heap": 73944,
+          "Graphics": 61611,
+          "TOTAL PSS": 236246
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 1759,
+          "over_16_67_ms": 595,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 28.375856099999986,
+          "worst_ms": 66.159077
+        },
+        "decode": {
+          "count": 979,
+          "median_ms": 12.0,
+          "p95_ms": 36.0,
+          "max_ms": 61,
+          "sample_factors": {
+            "1": 139,
+            "2": 414,
+            "4": 308,
+            "8": 112,
+            "16": 6
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 6475,
+          "refresh_misses": 2633,
+          "decodes_scheduled": 1167,
+          "end_bytes": 14468504,
+          "max_observed_bytes": 17544160,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.7109134826526131
+        }
+      },
+      {
+        "stage": "floating",
+        "repeat": 2,
+        "start": 1790940692.257,
+        "start_ns": 12682145849735,
+        "end": 1790940724.313,
+        "end_ns": 12714201954789,
+        "peak_sample": {
+          "timestamp": 1790940714.5281613,
+          "Java Heap": 13140,
+          "Native Heap": 73404,
+          "Graphics": 82216,
+          "TOTAL PSS": 257798
+        },
+        "memory_samples": 64,
+        "frames": {
+          "count": 1790,
+          "over_16_67_ms": 541,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 29.87884774999999,
+          "worst_ms": 65.276185
+        },
+        "decode": {
+          "count": 971,
+          "median_ms": 13.0,
+          "p95_ms": 34.5,
+          "max_ms": 61,
+          "sample_factors": {
+            "1": 134,
+            "2": 400,
+            "4": 334,
+            "8": 98,
+            "16": 5
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 6600,
+          "refresh_misses": 2575,
+          "decodes_scheduled": 1131,
+          "end_bytes": 14468504,
+          "max_observed_bytes": 14468504,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.7193460490463215
+        }
+      },
+      {
+        "stage": "floating",
+        "repeat": 3,
+        "start": 1790940725.316,
+        "start_ns": 12715204658250,
+        "end": 1790940756.985,
+        "end_ns": 12746873712073,
+        "peak_sample": {
+          "timestamp": 1790940747.5407019,
+          "Java Heap": 13220,
+          "Native Heap": 72724,
+          "Graphics": 80439,
+          "TOTAL PSS": 255864
+        },
+        "memory_samples": 63,
+        "frames": {
+          "count": 1775,
+          "over_16_67_ms": 516,
+          "frozen_over_700_ms": 0,
+          "p95_ms": 27.816306999999988,
+          "worst_ms": 64.510606
+        },
+        "decode": {
+          "count": 948,
+          "median_ms": 12.0,
+          "p95_ms": 33.0,
+          "max_ms": 64,
+          "sample_factors": {
+            "1": 135,
+            "2": 395,
+            "4": 318,
+            "8": 98,
+            "16": 2
+          }
+        },
+        "decode_failures": 0,
+        "cache": {
+          "refresh_hits": 6358,
+          "refresh_misses": 2682,
+          "decodes_scheduled": 1151,
+          "end_bytes": 14468504,
+          "max_observed_bytes": 14468504,
+          "budget_bytes": 33554432,
+          "refresh_hit_ratio": 0.7033185840707965
+        }
+      }
+    ],
+    "board_restored": true,
+    "oom": false,
+    "floating_skipped": false,
+    "limitations": "Sampled PSS is a lower bound on peak. gfxinfo ring buffers can omit frames. Programmatic viewport changes bypass gesture recognition. Cache experiments do not draw frames. Decode times omit canceled jobs and queue time. Debug/instrumentation/capture overhead is included."
+  }
+}

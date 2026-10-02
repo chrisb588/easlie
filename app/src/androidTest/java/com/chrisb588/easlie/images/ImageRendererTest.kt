@@ -9,6 +9,32 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ImageRendererTest {
+    @Test fun clearingSeveralQueuedDecodesDoesNotModifyTheCancellationIteration() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File.createTempFile("queued-clear-test-", ".png", context.cacheDir)
+        Bitmap.createBitmap(1024, 512, Bitmap.Config.ARGB_8888).let { bitmap ->
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+        val source = ImageSource(file, 1024, 512, 0, false)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val renderer = ImageRenderer(scope, 16L * 1024 * 1024)
+        val items = (1..30).map { BoardItem("image-$it", CanvasPoint(0f, 0f), 128f, 64f, zIndex = it) }
+        try {
+            withContext(Dispatchers.Main) {
+                renderer.refresh(items, items.associate { it.id to source }, CanvasViewport(), CanvasSize(1200f, 800f), 1f)
+                renderer.clear()
+                assertTrue(renderer.images.isEmpty())
+            }
+            scope.coroutineContext[Job]!!.children.toList().joinAll()
+            withContext(Dispatchers.Main) { assertTrue(renderer.images.isEmpty()) }
+        } finally {
+            withContext(Dispatchers.Main) { scope.cancel() }
+            scope.coroutineContext[Job]!!.join()
+            file.delete()
+        }
+    }
+
     @Test fun sharperDecodeRetainsPreviewAndLeavingViewportReleasesImages() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = File.createTempFile("render-test-", ".png", context.cacheDir)

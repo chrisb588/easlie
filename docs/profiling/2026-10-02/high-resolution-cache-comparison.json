@@ -1,0 +1,792 @@
+{
+  "memory_unit": "KiB",
+  "runs": [
+    {
+      "order": 1,
+      "divisor": 16,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 16,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.027021050453186035,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-16",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 9384,
+            "Native Heap": 50772,
+            "Graphics": 0,
+            "TOTAL PSS": 134177
+          },
+          "last_sample": {
+            "Java Heap": 8892,
+            "Native Heap": 13524,
+            "Graphics": 0,
+            "TOTAL PSS": 96436
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 3389,
+            "median_ms": 9.0,
+            "p95_ms": 88.59999999999991,
+            "max_ms": 178,
+            "sample_factors": {
+              "1": 159,
+              "2": 1038,
+              "4": 1595,
+              "8": 344,
+              "16": 246,
+              "32": 7
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 301,
+            "median_ms": 90.0,
+            "p95_ms": 149.0,
+            "max_ms": 178,
+            "sample_factors": {
+              "4": 7,
+              "8": 41,
+              "16": 246,
+              "32": 7
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 80506,
+            "refresh_misses": 27410,
+            "decodes_scheduled": 3927,
+            "end_bytes": 9066808,
+            "max_observed_bytes": 11017424,
+            "budget_bytes": 16777216,
+            "refresh_hit_ratio": 0.7460061529337633
+          },
+          "elapsed_seconds": 122.022
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "divisor": 8,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 8,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.026241064071655273,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-8",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 9116,
+            "Native Heap": 75588,
+            "Graphics": 0,
+            "TOTAL PSS": 158577
+          },
+          "last_sample": {
+            "Java Heap": 8888,
+            "Native Heap": 17356,
+            "Graphics": 0,
+            "TOTAL PSS": 100414
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 3764,
+            "median_ms": 9.0,
+            "p95_ms": 88.0,
+            "max_ms": 198,
+            "sample_factors": {
+              "1": 367,
+              "2": 1457,
+              "4": 1342,
+              "8": 335,
+              "16": 263
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 352,
+            "median_ms": 88.0,
+            "p95_ms": 150.89999999999998,
+            "max_ms": 198,
+            "sample_factors": {
+              "2": 4,
+              "4": 13,
+              "8": 72,
+              "16": 263
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 71142,
+            "refresh_misses": 35185,
+            "decodes_scheduled": 4677,
+            "end_bytes": 13243704,
+            "max_observed_bytes": 25078976,
+            "budget_bytes": 33554432,
+            "refresh_hit_ratio": 0.6690868735128425
+          },
+          "elapsed_seconds": 122.018
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "divisor": 4,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 4,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.024347305297851562,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-4",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 9328,
+            "Native Heap": 88864,
+            "Graphics": 0,
+            "TOTAL PSS": 172151
+          },
+          "last_sample": {
+            "Java Heap": 8888,
+            "Native Heap": 39036,
+            "Graphics": 0,
+            "TOTAL PSS": 122048
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 2875,
+            "median_ms": 9.0,
+            "p95_ms": 106.0,
+            "max_ms": 206,
+            "sample_factors": {
+              "1": 532,
+              "2": 957,
+              "4": 996,
+              "8": 289,
+              "16": 101
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 368,
+            "median_ms": 97.0,
+            "p95_ms": 153.64999999999998,
+            "max_ms": 206,
+            "sample_factors": {
+              "2": 7,
+              "4": 41,
+              "8": 219,
+              "16": 101
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 58693,
+            "refresh_misses": 47009,
+            "decodes_scheduled": 5026,
+            "end_bytes": 35644648,
+            "max_observed_bytes": 35644648,
+            "budget_bytes": 67108864,
+            "refresh_hit_ratio": 0.5552685852680176
+          },
+          "elapsed_seconds": 122.027
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "divisor": 4,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 4,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.026499629020690918,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-4",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 9360,
+            "Native Heap": 91092,
+            "Graphics": 0,
+            "TOTAL PSS": 174567
+          },
+          "last_sample": {
+            "Java Heap": 8888,
+            "Native Heap": 39172,
+            "Graphics": 0,
+            "TOTAL PSS": 122183
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 2851,
+            "median_ms": 9.0,
+            "p95_ms": 106.0,
+            "max_ms": 217,
+            "sample_factors": {
+              "1": 524,
+              "2": 940,
+              "4": 995,
+              "8": 289,
+              "16": 103
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 373,
+            "median_ms": 94.0,
+            "p95_ms": 154.39999999999998,
+            "max_ms": 217,
+            "sample_factors": {
+              "2": 7,
+              "4": 42,
+              "8": 222,
+              "16": 102
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 58705,
+            "refresh_misses": 46793,
+            "decodes_scheduled": 5016,
+            "end_bytes": 35644648,
+            "max_observed_bytes": 38731024,
+            "budget_bytes": 67108864,
+            "refresh_hit_ratio": 0.5564560465601244
+          },
+          "elapsed_seconds": 122.016
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "divisor": 8,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 8,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.02633678913116455,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-8",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 9108,
+            "Native Heap": 79688,
+            "Graphics": 0,
+            "TOTAL PSS": 162716
+          },
+          "last_sample": {
+            "Java Heap": 8888,
+            "Native Heap": 17592,
+            "Graphics": 0,
+            "TOTAL PSS": 100671
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 3715,
+            "median_ms": 9.0,
+            "p95_ms": 88.0,
+            "max_ms": 197,
+            "sample_factors": {
+              "1": 359,
+              "2": 1433,
+              "4": 1337,
+              "8": 325,
+              "16": 261
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 349,
+            "median_ms": 89.0,
+            "p95_ms": 153.0,
+            "max_ms": 197,
+            "sample_factors": {
+              "2": 4,
+              "4": 14,
+              "8": 70,
+              "16": 261
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 71532,
+            "refresh_misses": 35225,
+            "decodes_scheduled": 4650,
+            "end_bytes": 13243704,
+            "max_observed_bytes": 25078976,
+            "budget_bytes": 33554432,
+            "refresh_hit_ratio": 0.6700450555935442
+          },
+          "elapsed_seconds": 122.028
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "divisor": 16,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 16,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.027283430099487305,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-16",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 9280,
+            "Native Heap": 51788,
+            "Graphics": 0,
+            "TOTAL PSS": 135100
+          },
+          "last_sample": {
+            "Java Heap": 8892,
+            "Native Heap": 13628,
+            "Graphics": 0,
+            "TOTAL PSS": 96572
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 3435,
+            "median_ms": 9.0,
+            "p95_ms": 84.29999999999973,
+            "max_ms": 167,
+            "sample_factors": {
+              "1": 161,
+              "2": 1046,
+              "4": 1622,
+              "8": 353,
+              "16": 248,
+              "32": 5
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 300,
+            "median_ms": 88.0,
+            "p95_ms": 145.0,
+            "max_ms": 167,
+            "sample_factors": {
+              "4": 7,
+              "8": 41,
+              "16": 247,
+              "32": 5
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 80711,
+            "refresh_misses": 26883,
+            "decodes_scheduled": 3945,
+            "end_bytes": 9066808,
+            "max_observed_bytes": 10518400,
+            "budget_bytes": 16777216,
+            "refresh_hit_ratio": 0.7501440600776995
+          },
+          "elapsed_seconds": 122.014
+        }
+      ]
+    },
+    {
+      "order": 7,
+      "divisor": 8,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 8,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.022661209106445312,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-8",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 10148,
+            "Native Heap": 66588,
+            "Graphics": 0,
+            "TOTAL PSS": 154279
+          },
+          "last_sample": {
+            "Java Heap": 9956,
+            "Native Heap": 17224,
+            "Graphics": 0,
+            "TOTAL PSS": 104812
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 3755,
+            "median_ms": 9.0,
+            "p95_ms": 88.0,
+            "max_ms": 198,
+            "sample_factors": {
+              "1": 360,
+              "2": 1448,
+              "4": 1352,
+              "8": 333,
+              "16": 262
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 351,
+            "median_ms": 88.0,
+            "p95_ms": 151.5,
+            "max_ms": 198,
+            "sample_factors": {
+              "2": 5,
+              "4": 13,
+              "8": 71,
+              "16": 262
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 71992,
+            "refresh_misses": 35572,
+            "decodes_scheduled": 4657,
+            "end_bytes": 13243704,
+            "max_observed_bytes": 24000000,
+            "budget_bytes": 33554432,
+            "refresh_hit_ratio": 0.6692945595180544
+          },
+          "elapsed_seconds": 122.028
+        }
+      ]
+    },
+    {
+      "order": 8,
+      "divisor": 16,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 16,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.02135598659515381,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-16",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 10520,
+            "Native Heap": 51396,
+            "Graphics": 0,
+            "TOTAL PSS": 139972
+          },
+          "last_sample": {
+            "Java Heap": 9956,
+            "Native Heap": 13672,
+            "Graphics": 0,
+            "TOTAL PSS": 101694
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 3440,
+            "median_ms": 9.0,
+            "p95_ms": 85.09999999999945,
+            "max_ms": 165,
+            "sample_factors": {
+              "1": 157,
+              "2": 1054,
+              "4": 1619,
+              "8": 356,
+              "16": 247,
+              "32": 7
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 301,
+            "median_ms": 88.0,
+            "p95_ms": 145.0,
+            "max_ms": 165,
+            "sample_factors": {
+              "4": 7,
+              "8": 41,
+              "16": 246,
+              "32": 7
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 81199,
+            "refresh_misses": 26395,
+            "decodes_scheduled": 3957,
+            "end_bytes": 9066808,
+            "max_observed_bytes": 10577280,
+            "budget_bytes": 16777216,
+            "refresh_hit_ratio": 0.7546796289755935
+          },
+          "elapsed_seconds": 122.019
+        }
+      ]
+    },
+    {
+      "order": 9,
+      "divisor": 4,
+      "metadata": {
+        "seconds": 120,
+        "repetitions": 1,
+        "interval_seconds": 0.5,
+        "floating_requested": false,
+        "floating_only": false,
+        "cache_only": true,
+        "hosts_only": false,
+        "cache_divisor": 4,
+        "commit": "e7c1c75ff288d3ce4ea4e635b161a7623be1b046",
+        "dirty": true,
+        "apk_sha256": {
+          "app/build/outputs/apk/debug/app-debug.apk": "c61f1618769c63c5056b36b048caa77ff332171101fefdbcbf2090a81f126ec2",
+          "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "7a0914f66eaa4c6fc347dbdcfb2a51573ce0a8dc2531d8bb9b9e56f700285b28"
+        }
+      },
+      "clock_uncertainty_seconds": 0.02478480339050293,
+      "board_restored": true,
+      "oom": false,
+      "stages": [
+        {
+          "stage": "cache-4",
+          "repeat": 1,
+          "peak_sample": {
+            "Java Heap": 10440,
+            "Native Heap": 89688,
+            "Graphics": 0,
+            "TOTAL PSS": 177891
+          },
+          "last_sample": {
+            "Java Heap": 9956,
+            "Native Heap": 39308,
+            "Graphics": 0,
+            "TOTAL PSS": 127231
+          },
+          "memory_samples": 244,
+          "frames": {
+            "count": 0,
+            "over_16_67_ms": 0,
+            "frozen_over_700_ms": 0,
+            "p95_ms": null,
+            "worst_ms": null,
+            "invalid_future_completions": 0
+          },
+          "decode": {
+            "count": 2866,
+            "median_ms": 9.0,
+            "p95_ms": 106.75,
+            "max_ms": 195,
+            "sample_factors": {
+              "1": 537,
+              "2": 965,
+              "4": 977,
+              "8": 285,
+              "16": 102
+            }
+          },
+          "large_source_decode": {
+            "min_source_edge_px": 4000,
+            "count": 372,
+            "median_ms": 94.0,
+            "p95_ms": 152.45,
+            "max_ms": 195,
+            "sample_factors": {
+              "2": 7,
+              "4": 43,
+              "8": 220,
+              "16": 102
+            }
+          },
+          "decode_failures": 0,
+          "cache": {
+            "refresh_hits": 59171,
+            "refresh_misses": 47018,
+            "decodes_scheduled": 5025,
+            "end_bytes": 35644648,
+            "max_observed_bytes": 35644648,
+            "budget_bytes": 67108864,
+            "refresh_hit_ratio": 0.5572234412227255
+          },
+          "elapsed_seconds": 122.011
+        }
+      ]
+    }
+  ],
+  "limitations": "Renderer-only comparison does not draw frames. Each run uses a fresh process; file caches are warm. All 30 images receive detail focus for approximately three seconds during a 120-second pass. Three independent passes per budget vary budget order."
+}

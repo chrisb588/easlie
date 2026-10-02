@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.ActivityManager
 import android.content.Context
 import android.content.ContentResolver
+import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -24,12 +25,14 @@ import kotlinx.coroutines.sync.withLock
 class EaslieApplication : Application() {
     val board by lazy {
         val memoryClass = (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).memoryClass
-        BoardStore(File(filesDir, "board"), memoryClass.toLong() * 1024 * 1024 / 8)
+        BoardStore(File(filesDir, "board"), memoryClass.toLong() * 1024 * 1024 / 8,
+            applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
     }
 }
 
 /** One authoritative board. All edits and disk snapshots pass through the same mutex. */
-class BoardStore internal constructor(directory: File? = null, cacheBudget: Long = 16L * 1024 * 1024) {
+class BoardStore internal constructor(directory: File? = null, cacheBudget: Long = 16L * 1024 * 1024,
+    profileImages: Boolean = false) {
     var items by mutableStateOf<List<BoardItem>>(emptyList())
         private set
     val images: Map<String, ImageBitmap> get() = renderer.images
@@ -51,7 +54,7 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
 
     private val storage = directory?.let { BoardStorage(it) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val renderer = ImageRenderer(scope, cacheBudget)
+    private val renderer = ImageRenderer(scope, cacheBudget, profileImages)
     private val sources = mutableMapOf<String, ImageSource>()
     private val canvasOwners = mutableListOf<Any>()
     private var activeCanvasOwner by mutableStateOf<Any?>(null)
@@ -210,6 +213,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     }
 
     fun releaseImages() { renderer.clear() }
+
+    internal fun logImageProfile() { renderer.logProfile() }
 
     fun enqueueImport(resolver: ContentResolver, uris: List<Uri>) {
         if (uris.isEmpty()) return
