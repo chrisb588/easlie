@@ -23,4 +23,7 @@
     <string name="floating_board_drag_hint">Drag this header to move</string>
     <string name="floating_board_resize_left_label">Resize floating board from bottom left</string>
     <string name="floating_board_first_run_hint">Move: drag the top bar. Resize: drag a bottom corner. Return or close: tap the board to show controls, then choose a button. Tap this hint to dismiss.</string>
+    <string name="about">About</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="close_about">Close About</string>
 </resources>
