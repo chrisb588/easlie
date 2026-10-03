@@ -8,6 +8,10 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -47,6 +51,7 @@ import com.chrisb588.easlie.images.intersects
 object CanvasTestTags {
     const val FullScreenBoard = "full-screen-board"
     const val FloatingBoard = "floating-board"
+    const val Deselect = "deselect-image"
 }
 
 private enum class DragKind { Pan, Move, Resize, Rotate }
@@ -87,7 +92,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                 .onSizeChanged { canvasSize = CanvasSize(it.width.toFloat(), it.height.toFloat()) }
                 .testTag(if (floatingMode) CanvasTestTags.FloatingBoard else CanvasTestTags.FullScreenBoard)
                 .semantics { contentDescription = "Reference image board. Tap to select; drag a selected image or its handles. Double-tap for Delete." }
-                .pointerInput(board.activeBoardId, interactive, board, handleRadius, rotationGap) {
+                .pointerInput(board.activeBoardId, interactive, board, handleRadius, rotationGap, selectedId) {
                     if (!interactive) return@pointerInput
                     var lastTapTime = 0L
                     var lastTapId: String? = null
@@ -133,13 +138,17 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                             val initialItem = if (kind == DragKind.Resize || kind == DragKind.Rotate) selected else hit
                             var dragged = false
                             var viewportGesture = false
+                            var twoFingerItem: BoardItem? = null
+                            var resizePointer: PointerId? = null
+                            var initialDistance = 0f
+                            var imagePointersEnded = false
                             var totalDelta = Offset.Zero
                             var lastPosition = down.position
                             var upTime = down.uptimeMillis
                             do {
                                 val event = awaitPointerEvent()
                                 val pressed = event.changes.count { it.pressed }
-                                if (pressed >= 2 && (viewportGesture || !dragged || kind == DragKind.Pan)) {
+                                if (pressed >= 2 && (viewportGesture || !dragged || kind == DragKind.Pan) && twoFingerItem == null) {
                                     viewportGesture = true
                                     dragged = true
                                     lastTapId = null
@@ -152,7 +161,35 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                     }
                                     event.changes.forEach { if (it.pressed) it.consume() }
                                 } else if (pressed >= 2) {
-                                    // An established image drag keeps ownership until every finger lifts.
+                                    // Transition only when a new second finger lands on a current resize corner.
+                                    if (pressed == 2 && kind == DragKind.Move && twoFingerItem == null && !imagePointersEnded) {
+                                        val first = event.changes.firstOrNull { it.id == down.id && it.pressed }
+                                        val second = event.changes.firstOrNull { it.id != down.id && it.pressed && !it.previousPressed }
+                                        val current = board.items.firstOrNull { it.id == initialItem?.id }
+                                        if (first != null && second != null && current != null) {
+                                            val viewport = board.viewportFor(floatingMode)
+                                            val onCorner = corners.any {
+                                                val point = viewport.worldToWindow(current.corner(it.xSign, it.ySign), size)
+                                                (point.toOffset() - second.position).getDistance() <= handleRadius * 2f
+                                            }
+                                            val distance = (first.position - second.position).getDistance()
+                                            if (onCorner && distance > 0f) {
+                                                twoFingerItem = current
+                                                resizePointer = second.id
+                                                initialDistance = distance
+                                            }
+                                        }
+                                    }
+                                    val first = event.changes.firstOrNull { it.id == down.id && it.pressed }
+                                    val second = event.changes.firstOrNull { it.id == resizePointer && it.pressed }
+                                    if (twoFingerItem != null && !imagePointersEnded) {
+                                        if (first == null || second == null) imagePointersEnded = true
+                                        else board.update(twoFingerItem.resizedAroundCenter(
+                                            (first.position - second.position).getDistance() / initialDistance))
+                                    }
+                                    event.changes.forEach { if (it.pressed) it.consume() }
+                                } else if (pressed == 1 && twoFingerItem != null) {
+                                    imagePointersEnded = true
                                     event.changes.forEach { if (it.pressed) it.consume() }
                                 } else if (pressed == 1 && !viewportGesture) {
                                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -232,6 +269,12 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                     drawCircle(selectionColor, handleRadius, rotation)
                 }
             }
+        }
+        if (selectedId != null) {
+            TextButton(
+                onClick = { selectedId = null; menuId = null },
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).testTag(CanvasTestTags.Deselect),
+            ) { Text("Deselect image") }
         }
         Box(Modifier.offset { IntOffset(menuPosition.x.roundToInt(), menuPosition.y.roundToInt()) }.size(1.dp)) {
             DropdownMenu(expanded = menuId != null, onDismissRequest = { menuId = null }) {
