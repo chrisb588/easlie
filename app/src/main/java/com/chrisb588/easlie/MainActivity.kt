@@ -210,7 +210,9 @@ private fun FloatingBoardScreen(
 ) {
     var creating by remember { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<StoredBoard?>(null) }
     var name by remember { mutableStateOf("Board 1") }
+    var renameName by remember { mutableStateOf("") }
     if (creating) {
         AlertDialog(onDismissRequest = { creating = false }, title = { Text("Create board") },
             text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Board name") }) },
@@ -220,8 +222,22 @@ private fun FloatingBoardScreen(
     if (opening) {
         AlertDialog(onDismissRequest = { opening = false }, title = { Text("Open board") },
             text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-                board.boards.forEach { entry -> TextButton(onClick = { board.openBoard(entry.id); opening = false }) { Text(entry.name) } }
+                board.boards.forEach { entry ->
+                    Row {
+                        TextButton(onClick = { board.openBoard(entry.id); opening = false }) { Text(entry.name) }
+                        TextButton(onClick = { renameName = entry.name; renaming = entry; opening = false }) { Text("Rename") }
+                    }
+                }
             } }, confirmButton = { TextButton(onClick = { opening = false }) { Text("Close") } })
+    }
+    renaming?.let { entry ->
+        AlertDialog(onDismissRequest = { renaming = null }, title = { Text("Rename board") },
+            text = { OutlinedTextField(value = renameName, onValueChange = { renameName = it }, label = { Text("Board name") }) },
+            confirmButton = { TextButton(enabled = renameName.isNotBlank(), onClick = {
+                board.renameBoard(entry.id, renameName)
+                renaming = null
+            }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } })
     }
     Column(
         modifier = modifier
@@ -265,7 +281,9 @@ private fun FloatingBoardScreen(
         }
         board.message?.let { message ->
             Row {
-                Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                val color = if (message.startsWith("Board renamed to ")) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error
+                Text(message, Modifier.weight(1f), color = color)
                 if (board.migrationFailed) {
                     TextButton(onClick = board::retryMigration) { Text("Retry") }
                 } else {

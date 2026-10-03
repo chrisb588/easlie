@@ -81,6 +81,19 @@ internal class BoardCollectionStorage(
             .also(::writeCollection)
     }
 
+    internal fun renameBoard(id: String, name: String): BoardCollection {
+        val requestedName = name.trim()
+        require(requestedName.isNotEmpty()) { "Board name is empty" }
+        val current = readCollection()
+        require(current.boards.any { it.id == id }) { "Board is unavailable" }
+        val uniqueName = uniqueName(requestedName, current.boards.filterNot { it.id == id })
+        val updated = current.copy(boards = current.boards.map { board ->
+            if (board.id == id) board.copy(name = uniqueName) else board
+        })
+        writeCollection(updated)
+        return updated
+    }
+
     private fun migrateLegacy(): BoardCollection {
         // A fixed ID means an interrupted attempt always resumes the same destination.
         val id = MIGRATED_BOARD_ID
