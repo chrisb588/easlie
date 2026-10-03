@@ -1,6 +1,5 @@
 package com.chrisb588.easlie.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +34,8 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun EaslieTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = ((LocalContext.current.applicationContext as? com.chrisb588.easlie.EaslieApplication)
+        ?.appearance?.appearance ?: Appearance.SYSTEM).isDark(isSystemInDarkTheme()),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit

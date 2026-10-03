@@ -43,6 +43,8 @@ import androidx.core.content.ContextCompat
 import com.chrisb588.easlie.images.sharedImageUris
 import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.EaslieTheme
+import com.chrisb588.easlie.ui.theme.AppearanceSettings
+import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
     private val board get() = (application as EaslieApplication).board
@@ -257,6 +259,9 @@ internal fun FloatingBoardScreen(
             text = stringResource(R.string.floating_board_title),
             style = MaterialTheme.typography.headlineSmall
         )
+        (LocalContext.current.applicationContext as? EaslieApplication)?.let {
+            AppearanceSettings(it.appearance)
+        }
         board.boards.firstOrNull { it.id == board.activeBoardId }?.let { Text(it.name) }
         Row {
             Button(enabled = board.collectionReady, onClick = { name = "Board 1"; creating = true }) { Text("Create board") }
