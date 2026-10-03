@@ -49,6 +49,12 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.EaslieTheme
+import com.chrisb588.easlie.ui.theme.AppearanceSettings
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -321,10 +327,24 @@ class FloatingBoardService : Service() {
                     if (store.collectionReady && store.activeBoardId == null) returnToFullScreen()
                 }
                 EaslieTheme {
-                    FullScreenCanvas(
-                        board = (application as EaslieApplication).board,
-                        floatingMode = true
-                    )
+                    val colors = MaterialTheme.colorScheme
+                    SideEffect {
+                        (root.background as GradientDrawable).setColor(colors.surface.toArgb())
+                        themedChrome.forEach { view ->
+                            view.setTextColor(colors.onSurfaceVariant.toArgb())
+                            view.setBackgroundColor(colors.surfaceVariant.toArgb())
+                            if (view is Button) view.backgroundTintList =
+                                android.content.res.ColorStateList.valueOf(colors.surfaceVariant.toArgb())
+                        }
+                    }
+                    Column {
+                        AppearanceSettings((application as EaslieApplication).appearance, floatingMode = true)
+                        FullScreenCanvas(
+                            board = store,
+                            floatingMode = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
@@ -381,6 +401,7 @@ class FloatingBoardService : Service() {
                 Gravity.CENTER
             ))
         }
+        themedChrome = listOf(header, returnButton, closeButton, resizeHandle, leftResizeHandle, hint)
         controlViews = listOf(header, controls, resizeHandle, leftResizeHandle)
         showControls()
         owner.start()
@@ -585,6 +606,7 @@ class FloatingBoardService : Service() {
         accessibilityFocusInside = false
         shouldMarkHintSeen = false
         controlViews = emptyList()
+        themedChrome = emptyList()
         val view = boardView ?: return
         try {
             windowManager?.removeViewImmediate(view)
@@ -676,6 +698,7 @@ class FloatingBoardService : Service() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).roundToInt()
 
+    private var themedChrome: List<TextView> = emptyList()
     private var controlViews: List<View> = emptyList()
 
     private fun showControls() {
