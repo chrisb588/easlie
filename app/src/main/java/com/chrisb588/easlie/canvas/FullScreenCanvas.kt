@@ -49,7 +49,7 @@ object CanvasTestTags {
     const val FloatingBoard = "floating-board"
 }
 
-private enum class DragKind { Pan, Move, Resize, Rotate, Blocked }
+private enum class DragKind { Pan, Move, Resize, Rotate }
 private data class Handle(val xSign: Float, val ySign: Float)
 private val corners = listOf(Handle(-1f, -1f), Handle(1f, -1f), Handle(1f, 1f), Handle(-1f, 1f))
 
@@ -128,7 +128,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                 rotationHit -> DragKind.Rotate
                                 hit == null -> DragKind.Pan
                                 hit.id == selectedId -> DragKind.Move
-                                else -> DragKind.Blocked
+                                else -> DragKind.Pan
                             }
                             val initialItem = if (kind == DragKind.Resize || kind == DragKind.Rotate) selected else hit
                             var dragged = false
@@ -139,7 +139,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                             do {
                                 val event = awaitPointerEvent()
                                 val pressed = event.changes.count { it.pressed }
-                                if (pressed >= 2) {
+                                if (pressed >= 2 && (viewportGesture || !dragged || kind == DragKind.Pan)) {
                                     viewportGesture = true
                                     dragged = true
                                     lastTapId = null
@@ -150,6 +150,9 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                             event.calculateZoom(), canvasSize, floatingMode,
                                         )
                                     }
+                                    event.changes.forEach { if (it.pressed) it.consume() }
+                                } else if (pressed >= 2) {
+                                    // An established image drag keeps ownership until every finger lifts.
                                     event.changes.forEach { if (it.pressed) it.consume() }
                                 } else if (pressed == 1 && !viewportGesture) {
                                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -173,7 +176,6 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                                 board.update(it.rotatedFrom(worldStart,
                                                     viewportAtStart.windowToWorld(change.position.toCanvasPoint(), size)))
                                             }
-                                            DragKind.Blocked -> Unit
                                         }
                                         change.consume()
                                     }
