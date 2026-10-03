@@ -59,6 +59,8 @@ class CanvasGestureOwnershipTest {
         }
         rule.runOnIdle {
             assertNotEquals(initial.zoom, board.viewportFor(floating).zoom)
+            assertEquals(initial.center.x, board.viewportFor(floating).center.x, 0.01f)
+            assertEquals(initial.center.y, board.viewportFor(floating).center.y, 0.01f)
             assertEquals(items, board.items)
             board.setViewport(initial, floating)
         }
@@ -69,12 +71,23 @@ class CanvasGestureOwnershipTest {
             board.setViewport(initial, floating)
         }
         // Stationary tap selects the topmost item; the next drag moves only it.
-        node.performTouchInput { down(center); up() }
+        node.performTouchInput { down(center); moveTo(center + Offset(1f, 0f)); up() }
         node.performTouchInput { down(center); moveTo(center + Offset(70f, 0f)); up() }
         rule.runOnIdle {
             assertEquals(initial, board.viewportFor(floating))
             assertEquals(items.first(), board.items.first())
             assertNotEquals(items.last().center, board.items.last().center)
         }
+        // Adding another finger after a selected-image move cannot claim the viewport.
+        node.performTouchInput {
+            val target = center + Offset(70f, 0f)
+            down(0, target)
+            moveTo(0, target + Offset(35f, 0f))
+            down(1, center - Offset(80f, 0f))
+            moveTo(1, center - Offset(120f, 0f))
+            up(1)
+            up(0)
+        }
+        rule.runOnIdle { assertEquals(initial, board.viewportFor(floating)) }
     }
 }
