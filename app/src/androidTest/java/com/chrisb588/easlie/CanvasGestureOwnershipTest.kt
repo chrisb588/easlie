@@ -33,7 +33,7 @@ class CanvasGestureOwnershipTest {
         instrumentation.targetContext.contentResolver.call(fixture, "create-clipping-fixture", null, null)
         val directory = File(instrumentation.targetContext.cacheDir, "gesture-${UUID.randomUUID()}")
         val board = BoardStore(directory)
-        rule.setContent { FullScreenCanvas(board, Modifier.size(300.dp), floatingMode = floating) }
+        rule.setContent { FullScreenCanvas(board, Modifier.size(500.dp), floatingMode = floating) }
         rule.runOnIdle {
             board.enqueueImport(instrumentation.targetContext.contentResolver, listOf(fixture, fixture))
         }
@@ -97,6 +97,9 @@ class CanvasGestureOwnershipTest {
             up(0)
         }
         rule.runOnIdle { assertEquals(initial, board.viewportFor(floating)) }
+        rule.runOnIdle {
+            board.update(board.items.last().copy(center = initial.center, width = 200f, height = 200f))
+        }
         // Transition at a current corner, then move both fingers and their midpoint.
         val transitionStart = board.items.last()
         node.performTouchInput {
@@ -111,9 +114,12 @@ class CanvasGestureOwnershipTest {
             val corner = Offset(point.x, point.y)
             down(1, corner)
             moveBy(0, Offset(-20f, -20f))
-            moveBy(1, Offset(40f, 40f))
         }
+        val firstFingerResize = board.items.last()
+        rule.runOnIdle { assertNotEquals(transition.width, firstFingerResize.width) }
+        node.performTouchInput { moveBy(1, Offset(40f, 40f)) }
         rule.runOnIdle {
+            assertNotEquals(firstFingerResize.width, board.items.last().width)
             val resized = board.items.last()
             assertNotEquals(transition.width, resized.width)
             assertEquals(transition.center, resized.center)
@@ -140,6 +146,9 @@ class CanvasGestureOwnershipTest {
         val deselected = board.items.toList()
         node.performTouchInput { down(center); moveTo(center + Offset(60f, 0f)); up() }
         rule.runOnIdle { assertEquals(deselected, board.items) }
+        rule.runOnIdle {
+            board.update(board.items.last().copy(center = initial.center, width = 200f, height = 200f))
+        }
         // Select again to exercise the unchanged opposite-corner and rotation anchors.
         val select = board.items.last()
         node.performTouchInput {
@@ -180,6 +189,38 @@ class CanvasGestureOwnershipTest {
             down(Offset(point.x, point.y)); moveBy(Offset(50f, 0f)); up()
         }
         rule.runOnIdle { assertNotEquals(interrupted.last().center, board.items.last().center) }
+        val beforeCanceledMove = board.items.last()
+        node.performTouchInput {
+            val point = initial.worldToWindow(beforeCanceledMove.center, CanvasSize(width.toFloat(), height.toFloat()))
+            down(Offset(point.x, point.y)); moveBy(Offset(45f, 0f)); cancel()
+        }
+        val canceledMove = board.items.toList()
+        rule.runOnIdle { assertNotEquals(beforeCanceledMove.center, canceledMove.last().center) }
+        rule.waitUntil(5000) {
+            runCatching { BoardStorage(directory).load().snapshot.items == canceledMove }.getOrDefault(false)
+        }
+        rule.runOnIdle {
+            board.update(board.items.last().copy(center = initial.center, width = 200f, height = 200f))
+        }
+        val resizeStart = board.items.last()
+        // Cancel after the two-finger transition, retaining its displayed center and size.
+        node.performTouchInput {
+            val point = initial.worldToWindow(resizeStart.center, CanvasSize(width.toFloat(), height.toFloat()))
+            down(0, Offset(point.x, point.y)); moveBy(0, Offset(35f, 0f))
+        }
+        val beforeCanceledResize = board.items.last()
+        node.performTouchInput {
+            val point = initial.worldToWindow(beforeCanceledResize.corner(1f, 1f), CanvasSize(width.toFloat(), height.toFloat()))
+            down(1, Offset(point.x, point.y)); moveBy(1, Offset(40f, 40f)); cancel()
+        }
+        val canceledResize = board.items.toList()
+        rule.runOnIdle {
+            assertNotEquals(beforeCanceledResize.width, canceledResize.last().width)
+            assertEquals(beforeCanceledResize.center, canceledResize.last().center)
+        }
+        rule.waitUntil(5000) {
+            runCatching { BoardStorage(directory).load().snapshot.items == canceledResize }.getOrDefault(false)
+        }
 
     }
 }
