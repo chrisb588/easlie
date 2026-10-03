@@ -210,6 +210,7 @@ internal fun FloatingBoardScreen(
 ) {
     var creating by remember { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<StoredBoard?>(null) }
     var renaming by remember { mutableStateOf<StoredBoard?>(null) }
     var name by remember { mutableStateOf("Board 1") }
     var renameName by remember { mutableStateOf("") }
@@ -225,10 +226,17 @@ internal fun FloatingBoardScreen(
                 board.boards.forEach { entry ->
                     Row {
                         TextButton(onClick = { board.openBoard(entry.id); opening = false }) { Text(entry.name) }
+                        TextButton(onClick = { deleting = entry; opening = false }) { Text("Delete") }
                         TextButton(onClick = { renameName = entry.name; renaming = entry; opening = false }) { Text("Rename") }
                     }
                 }
             } }, confirmButton = { TextButton(onClick = { opening = false }) { Text("Close") } })
+    }
+    deleting?.let { entry ->
+        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("Delete ${entry.name}?") },
+            text = { Text("This board and its images will be removed from easlie.") },
+            confirmButton = { TextButton(onClick = { board.deleteBoard(entry.id); deleting = null }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } })
     }
     renaming?.let { entry ->
         AlertDialog(onDismissRequest = { renaming = null }, title = { Text("Rename board") },
