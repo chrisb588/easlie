@@ -262,6 +262,7 @@ internal fun FloatingBoardScreen(
         (LocalContext.current.applicationContext as? EaslieApplication)?.let {
             AppearanceSettings(it.appearance)
         }
+        AboutSection()
         board.boards.firstOrNull { it.id == board.activeBoardId }?.let { Text(it.name) }
         Row {
             Button(enabled = board.collectionReady, onClick = { name = defaultBoardName(board.boards); creating = true }) { Text("Create board") }
