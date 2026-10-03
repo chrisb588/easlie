@@ -104,7 +104,16 @@ class BoardCollectionStoreTest {
             assertArrayEquals(firstStorage.asset(firstItem.assetId).readBytes(), secondStorage.asset(secondItem.assetId).readBytes())
             main { store.openBoard(first) }
             await { store.activeBoardId == first && store.items.size == 1 }
-            main { assertEquals(firstItem, store.items.single()); store.releaseImages() }
+            main { assertEquals(firstItem, store.items.single()); store.delete(firstItem.id) }
+            await { store.items.isEmpty() }
+            assertTrue(secondStorage.asset(secondItem.assetId).isFile)
+            assertEquals(listOf(secondItem), secondStorage.load().snapshot.items)
+            main { store.deleteBoard(first) }
+            await { store.activeBoardId == null }
+            assertFalse(File(root, "boards/$first").exists())
+            assertTrue(secondStorage.asset(secondItem.assetId).isFile)
+            assertEquals(listOf(secondItem), secondStorage.load().snapshot.items)
+            main { store.releaseImages() }
         } finally {
             resolver.call(provider, "release-reads", null, null)
             resolver.delete(source, null, null)
@@ -183,6 +192,71 @@ class BoardCollectionStoreTest {
             resolver.delete(source, null, null)
             root.deleteRecursively()
         }
+    }
+
+    @Test fun deletionDuringCopyAndQueuedSaveCannotRecreateDeletedBoard() {
+        val resolver = instrumentation.targetContext.contentResolver
+        val provider = Uri.parse("content://com.chrisb588.easlie.test.images")
+        val source = Uri.withAppendedPath(provider, "task-first.png")
+        resolver.call(provider, "create-task-fixtures", null, null)
+        val root = File(instrumentation.targetContext.cacheDir, "deletion-${UUID.randomUUID()}")
+        lateinit var store: BoardStore
+        try {
+            main { store = BoardStore(File(root, "board"), collectionMigration = true) }
+            await { store.collectionReady }
+            main { store.resizeWindow(CanvasSize(600f, 400f)); store.createBoard("Delete me") }
+            await { store.activeBoardId != null }
+            lateinit var deleted: String
+            main { deleted = store.activeBoardId!! }
+            resolver.call(provider, "hold-reads", null, null)
+            main { store.enqueueImport(resolver, listOf(source)) }
+            val deadline = android.os.SystemClock.uptimeMillis() + 5000
+            while (resolver.call(provider, "read-started", null, null)?.getBoolean("started") != true) {
+                check(android.os.SystemClock.uptimeMillis() < deadline) { "Import did not start" }
+                Thread.sleep(20)
+            }
+            main {
+                store.viewport = CanvasViewport(CanvasPoint(4f, 5f), 2f)
+                store.deleteBoard(deleted)
+                store.save()
+            }
+            await { store.activeBoardId == null && store.boards.isEmpty() }
+            main { assertTrue(store.items.isEmpty()); assertTrue(store.images.isEmpty()); store.createBoard("Survivor") }
+            await { store.activeBoardId != null }
+            lateinit var survivor: String
+            main { survivor = store.activeBoardId!! }
+            resolver.call(provider, "release-reads", null, null)
+            await { !store.importing && store.message?.contains("destination board was deleted") == true }
+            main { assertEquals(survivor, store.activeBoardId); assertTrue(store.items.isEmpty()) }
+            assertFalse(File(root, "boards/$deleted").exists())
+            assertEquals(listOf(survivor), BoardCollectionStorage(root, File(root, "board")).readCollection().boards.map { it.id })
+            assertTrue(BoardStorage(File(root, "boards/$survivor")).load().snapshot.items.isEmpty())
+        } finally {
+            resolver.call(provider, "release-reads", null, null)
+            resolver.delete(source, null, null)
+            root.deleteRecursively()
+        }
+    }
+
+    @Test fun missingSavedActiveIdentityReportsUnavailableWithoutSelectingAnotherBoard() {
+        val root = File(instrumentation.targetContext.cacheDir, "missing-${UUID.randomUUID()}")
+        val legacy = File(root, "board")
+        try {
+            val storage = BoardCollectionStorage(root, legacy)
+            storage.writeCollection(BoardCollection("missing", listOf(StoredBoard("survivor", "Survivor"))))
+            BoardStorage(storage.directoryFor("survivor")).save(BoardSnapshot())
+            lateinit var store: BoardStore
+            main { store = BoardStore(legacy, collectionMigration = true) }
+            await { store.collectionReady }
+            main {
+                assertNull(store.activeBoardId)
+                assertFalse(store.canEdit)
+                assertTrue(store.message!!.contains("previous board is unavailable"))
+                assertEquals(listOf("survivor"), store.boards.map { it.id })
+            }
+            assertFalse(storage.directoryFor("missing").exists())
+            assertEquals("missing", storage.readCollection().activeBoardId)
+        } finally { root.deleteRecursively() }
     }
 
 }

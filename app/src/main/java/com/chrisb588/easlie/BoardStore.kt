@@ -103,8 +103,14 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
             storage = withContext(Dispatchers.IO) {
                 if (collectionStorage != null) {
                     val directory = collectionStorage.initialize()
+                    val cleanupError = collectionStorage.recoverDeletions()
+                    if (cleanupError != null) message = cleanupError
                     val collection = collectionStorage.readCollection()
                     boards = collection.boards
+                    if (collection.activeBoardId != null && directory == null) {
+                        val unavailable = "The previous board is unavailable. Open or create a board."
+                        message = listOfNotNull(cleanupError, unavailable).joinToString(" ")
+                    }
                     activeBoardId = collection.activeBoardId?.takeIf { id -> directory != null && collection.boards.any { it.id == id } }
                     directory?.let(::BoardStorage)
                 } else storage
@@ -136,9 +142,6 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     "${restored.missing} missing asset(s), ${restored.malformed} malformed item(s), " +
                     "$unreadable unreadable image(s)."
                 reconciliationReferences = restored.referencedAssets
-            }
-            if (collectionStorage != null && activeBoardId == null && boards.isNotEmpty()) {
-                message = "The previous board is unavailable. Open or create a board."
             }
             writable = true
             migrationFailed = false
@@ -200,6 +203,35 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
         }
     }
 
+    fun deleteBoard(id: String) {
+        val collection = collectionStorage ?: return
+        scope.launch {
+            mutex.withLock {
+                if (!collectionReady) return@withLock
+                try {
+                    val deleted = withContext(Dispatchers.IO) { collection.deleteBoard(id) }
+                    boards = deleted.collection.boards
+                    val cancelledImport = pending.any { it.destination == id }
+                    pending.removeAll { it.destination == id }
+                    if (activeBoardId == id) {
+                        activeBoardId = null
+                        storage = null
+                        dirty = false
+                        items = emptyList()
+                        sources.clear()
+                        renderer.clear()
+                        fullScreen = CanvasViewport()
+                        floating = CanvasViewport()
+                        reconciliationReferences = emptySet()
+                    }
+                    message = deleted.cleanupError ?: if (cancelledImport) "The destination board was deleted. Import cannot continue." else null
+                } catch (failure: Exception) {
+                    message = "Board could not be deleted: ${failure.message}"
+                }
+            }
+        }
+    }
+
     fun retryMigration() {
         if (collectionStorage == null || !migrationFailed) return
         scope.launch {
@@ -251,7 +283,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     }
 
     fun save() {
-        scope.launch { mutex.withLock { if (dirty) saveEdits() } }
+        val destination = activeBoardId
+        scope.launch { mutex.withLock { if (dirty && destination == activeBoardId) saveEdits() } }
     }
 
     private fun snapshot(content: List<BoardItem> = items) = BoardSnapshot(content, fullScreen, floating)
@@ -261,7 +294,13 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
             normalizedStack(content)
         } else content
         val snapshot = snapshot(normalized)
-        withContext(Dispatchers.IO) { storage?.save(snapshot) }
+        val destination = activeBoardId
+        withContext(Dispatchers.IO) {
+            if (collectionStorage != null) {
+                require(collectionStorage.readCollection().boards.any { it.id == destination }) { "Destination board is unavailable" }
+            }
+            storage?.save(snapshot)
+        }
         reconciliationReferences = normalized.map { it.assetId }.toSet()
         dirty = false
         return normalized
@@ -274,9 +313,10 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     }
 
     fun delete(id: String) {
+        val destination = activeBoardId
         scope.launch {
             mutex.withLock {
-                if (!writable || !ready) return@withLock
+                if (!canEdit || destination != activeBoardId) return@withLock
                 val item = items.firstOrNull { it.id == id } ?: return@withLock
                 try {
                     val remaining = persist(items.filterNot { it.id == id })
@@ -359,7 +399,9 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                             run {
                                 val currentStorage = destinationStorage
                                 withContext(Dispatchers.IO) {
-                                    if (currentStorage != null) {
+                                    if (collectionStorage != null) {
+                                        UUID.randomUUID().toString() to copyImageSource(resolver, uri, null)
+                                    } else if (currentStorage != null) {
                                         val imported = currentStorage.import(resolver, uri)
                                         try {
                                             imported.id to readImageSource(currentStorage.asset(imported.id))
@@ -376,7 +418,15 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                         catch (_: Exception) { rejected++; continue }
                         mutex.withLock {
                             try {
-                                val (assetId, source) = asset
+                                val (assetId, temporarySource) = asset
+                                if (collectionStorage != null) {
+                                    require(withContext(Dispatchers.IO) {
+                                        collectionStorage.readCollection().boards.any { it.id == destination }
+                                    }) { "The destination board was deleted. Import cannot continue." }
+                                }
+                                val source = if (collectionStorage != null) withContext(Dispatchers.IO) {
+                                    temporarySource.copy(file = destinationStorage!!.adoptSource(assetId, temporarySource.file))
+                                } else temporarySource
                                 val isActiveDestination = destination == activeBoardId
                                 val targetSnapshot = if (isActiveDestination) snapshot() else withContext(Dispatchers.IO) {
                                     require(collectionStorage?.readCollection()?.boards?.any { it.id == destination } == true) { "Destination board is unavailable" }
@@ -401,12 +451,24 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                                 }
                                 accepted++
                             } catch (failure: Exception) {
-                                withContext(Dispatchers.IO) { asset.second.file.delete() }
+                                withContext(Dispatchers.IO) {
+                                    asset.second.file.delete()
+                                    destinationStorage?.asset(asset.first)?.delete()
+                                }
+                                if (collectionStorage != null && withContext(Dispatchers.IO) {
+                                    collectionStorage.readCollection().boards.none { it.id == destination }
+                                }) {
+                                    message = "The destination board was deleted. Import cannot continue."
+                                }
                                 rejected++
+                            } finally {
+                                if (collectionStorage != null) withContext(Dispatchers.IO) { asset.second.file.delete() }
                             }
                         }
                     }
-                    if (rejected > 0) message = "$rejected image(s) could not be imported or saved."
+                    if (rejected > 0 && message != "The destination board was deleted. Import cannot continue.") {
+                        message = "$rejected image(s) could not be imported or saved."
+                    }
                 }
             } finally { importing = false }
         }

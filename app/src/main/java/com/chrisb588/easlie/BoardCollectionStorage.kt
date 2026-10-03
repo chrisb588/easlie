@@ -7,6 +7,7 @@ import java.util.UUID
 
 internal data class StoredBoard(val id: String, val name: String)
 internal data class BoardCollection(val activeBoardId: String?, val boards: List<StoredBoard>)
+internal data class BoardDeletion(val collection: BoardCollection, val cleanupError: String?)
 
 /** Owns the collection index and performs the v0.1 single-board migration. */
 internal class BoardCollectionStorage(
@@ -18,10 +19,12 @@ internal class BoardCollectionStorage(
         Os.rename(source.path, destination.path)
     },
     private val createEmptyBoard: (File) -> Unit = { BoardStorage(it).save(BoardSnapshot()) },
+    private val removeDirectory: (File) -> Boolean = { it.deleteRecursively() },
     private val newBoardId: () -> String = { UUID.randomUUID().toString() },
 ) {
     private val boardsDirectory = File(root, "boards")
     private val indexFile = File(root, "boards.index")
+    private val deletionDirectory = File(root, "pending-deletions")
     val hasCollection: Boolean get() = indexFile.exists()
 
     fun initialize(): File? {
@@ -92,6 +95,46 @@ internal class BoardCollectionStorage(
         })
         writeCollection(updated)
         return updated
+    }
+
+    internal fun deleteBoard(id: String): BoardDeletion {
+        val current = readCollection()
+        require(current.boards.any { it.id == id }) { "Board is unavailable" }
+        val updated = current.copy(
+            activeBoardId = current.activeBoardId.takeUnless { it == id },
+            boards = current.boards.filterNot { it.id == id },
+        )
+        // Record cleanup before removing ownership. A failed index commit leaves
+        // the board intact; recovery checks the committed index before deleting.
+        check(deletionDirectory.isDirectory || deletionDirectory.mkdirs()) { "Could not prepare board deletion" }
+        val marker = File(deletionDirectory, id)
+        FileOutputStream(marker).use { it.write(id.toByteArray()); it.fd.sync() }
+        try { writeCollection(updated) }
+        catch (failure: Exception) { marker.delete(); throw failure }
+        val cleanupError = try { recoverDeletions() }
+        catch (_: Exception) { "Deleted board images could not be fully removed. Cleanup will retry on next launch." }
+        return BoardDeletion(updated, cleanupError)
+    }
+
+    internal fun recoverDeletions(): String? {
+        val current = readCollection()
+        if (!deletionDirectory.exists()) return null
+        val markers = deletionDirectory.listFiles() ?: return "Could not inspect pending board cleanup"
+        var failed = false
+        for (marker in markers) {
+            val id = marker.name
+            if (!id.matches(ID_PATTERN) || !marker.isFile) continue
+            if (current.boards.any { it.id == id }) {
+                if (!marker.delete()) failed = true
+                continue
+            }
+            try {
+                val directory = directoryFor(id)
+                if (directory.exists() && !removeDirectory(directory)) failed = true
+                else if (!marker.delete()) failed = true
+            } catch (_: Exception) { failed = true }
+        }
+        return if (failed) "Deleted board images could not be fully removed. Cleanup will retry on next launch." else null
     }
 
     private fun migrateLegacy(): BoardCollection {
