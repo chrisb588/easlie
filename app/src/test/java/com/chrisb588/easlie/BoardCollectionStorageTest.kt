@@ -147,6 +147,45 @@ class BoardCollectionStorageTest {
         assertEquals(opened, storage.readCollection())
     }
 
+    @Test fun renameResolvesCollisionsPersistsNameAndPreservesIdentityActiveBoardAndOrder() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ids = ArrayDeque(listOf("one", "two", "three")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        val one = storage.createBoard("Board 1")
+        val two = storage.createBoard("Board 1 (2)")
+        val three = storage.createBoard("Third")
+        val orderBefore = three.boards.map { it.id }
+
+        val renamed = storage.renameBoard(three.activeBoardId!!, " Board 1 ")
+        assertEquals("Board 1 (3)", renamed.boards.first { it.id == three.activeBoardId }.name)
+        assertEquals(orderBefore, renamed.boards.map { it.id })
+        assertEquals(three.activeBoardId, renamed.activeBoardId)
+        assertEquals(renamed, storageForManagement(root, legacy).readCollection())
+
+        val sameName = storage.renameBoard(three.activeBoardId!!, "Board 1 (3)")
+        assertEquals("Board 1 (3)", sameName.boards.first { it.id == three.activeBoardId }.name)
+        assertEquals(listOf("three", "two", "one"), sameName.boards.map { it.id })
+        assertEquals("Board 1 (2)", sameName.boards.first { it.id == two.activeBoardId }.name)
+        val restarted = storageForManagement(root, legacy)
+        assertEquals(restarted.directoryFor(three.activeBoardId!!), restarted.initialize())
+        assertEquals(sameName, restarted.readCollection())
+    }
+
+    @Test fun failedRenameLeavesCollectionBytesAndBoardNamesUnchanged() = withDirectories { root, legacy ->
+        val working = storageForManagement(root, legacy, ids = ArrayDeque(listOf("one")))
+        working.writeCollection(BoardCollection(null, emptyList()))
+        val created = working.createBoard("Original")
+        val before = File(root, "boards.index").readBytes()
+        val failing = BoardCollectionStorage(root, legacy, validateBoard = ::validateFixture,
+            atomicReplace = { _, _ -> throw IllegalStateException("injected index failure") })
+
+        try { failing.renameBoard(created.activeBoardId!!, "Replacement"); fail("Expected index write failure") }
+        catch (expected: IllegalStateException) { assertEquals("injected index failure", expected.message) }
+
+        assertArrayEquals(before, File(root, "boards.index").readBytes())
+        assertEquals("Original", working.readCollection().boards.single().name)
+        assertFalse(File(root, "boards.index.tmp").exists())
+    }
+
     @Test fun missingActiveBoardReturnsToManagementWithoutChangingTheCollection() = withDirectories { root, legacy ->
         val storage = storageForManagement(root, legacy)
         val collection = BoardCollection("missing", listOf(StoredBoard("present", "Here")))

@@ -164,6 +164,23 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
 
     fun openBoard(id: String) = changeBoard { it.openBoard(id) }
 
+    fun renameBoard(id: String, name: String) {
+        val collection = collectionStorage ?: return
+        scope.launch {
+            mutex.withLock {
+                if (!collectionReady) return@withLock
+                try {
+                    val updated = withContext(Dispatchers.IO) { collection.renameBoard(id, name) }
+                    boards = updated.boards
+                    val resolvedName = updated.boards.first { it.id == id }.name
+                    message = "Board renamed to $resolvedName."
+                } catch (failure: Exception) {
+                    message = "Board could not be renamed: ${failure.message}"
+                }
+            }
+        }
+    }
+
     private fun changeBoard(change: (BoardCollectionStorage) -> BoardCollection) {
         val collection = collectionStorage ?: return
         scope.launch {
