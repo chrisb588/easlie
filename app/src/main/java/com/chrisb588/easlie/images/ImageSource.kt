@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
+import java.io.EOFException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
@@ -18,7 +19,7 @@ internal data class ImageSource(val file: File, val width: Int, val height: Int,
         val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply {
             inSampleSize = sample
             inPreferredConfig = Bitmap.Config.ARGB_8888
-        }) ?: error("Unreadable image")
+        }) ?: throw IllegalArgumentException("Invalid or unsupported image")
         try {
             currentCoroutineContext().ensureActive()
             val matrix = Matrix().apply {
@@ -69,7 +70,8 @@ internal suspend fun readImageSource(file: File): ImageSource {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(file.path, bounds)
     require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outMimeType in supportedMimeTypes)
-    file.inputStream().use { requireStillImage(it, bounds.outMimeType) }
+    try { file.inputStream().use { requireStillImage(it, bounds.outMimeType) } }
+    catch (failure: EOFException) { throw IllegalArgumentException("Invalid truncated image", failure) }
     val exif = ExifInterface(file)
     val swapped = exif.rotationDegrees % 180 != 0
     val source = ImageSource(file, if (swapped) bounds.outHeight else bounds.outWidth,
