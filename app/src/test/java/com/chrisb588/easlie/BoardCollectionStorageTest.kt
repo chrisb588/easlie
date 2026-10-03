@@ -257,6 +257,83 @@ class BoardCollectionStorageTest {
         assertEquals(CanvasViewport(CanvasPoint(10f, 11f), 12f), BoardStorage(secondDirectory).load().snapshot.floating)
     }
 
+    @Test fun inactiveDeletionKeepsActiveBoardIndependentAssetsAndBothViewports() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ArrayDeque(listOf("one", "two")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        storage.createBoard("One")
+        storage.createBoard("Two")
+        val one = storage.directoryFor("one")
+        val two = storage.directoryFor("two")
+        writeBoardFixture(two, 7, 10)
+        File(one, "assets/shared-source").apply { parentFile!!.mkdirs(); writeText("independent copy") }
+        val survivor = File(two, "assets/shared-source").apply { parentFile!!.mkdirs(); writeText("independent copy") }
+        val snapshot = BoardStorage(two).load().snapshot
+        val result = storage.deleteBoard("one")
+        assertNull(result.cleanupError)
+        assertEquals("two", result.collection.activeBoardId)
+        assertFalse(one.exists())
+        assertEquals("independent copy", survivor.readText())
+        assertEquals(snapshot, BoardStorage(two).load().snapshot)
+        assertEquals(result.collection, storage.readCollection())
+    }
+
+    @Test fun activeAndLastDeletionReturnToManagementWithoutRevivingLegacy() = withDirectories { root, legacy ->
+        seedLegacy(legacy)
+        val storage = storageForManagement(root, legacy, ArrayDeque(listOf("other", "replacement")))
+        val migrated = storage.initialize()!!
+        storage.createBoard("Other")
+        assertNull(storage.deleteBoard("other").collection.activeBoardId)
+        assertNull(storage.initialize())
+        assertTrue(migrated.exists())
+        val empty = storage.deleteBoard(migrated.name)
+        assertEquals(BoardCollection(null, emptyList()), empty.collection)
+        assertNull(storage.initialize())
+        assertTrue(File(legacy, "board.json").isFile)
+        assertFalse(migrated.exists())
+        assertEquals("Other", storage.createBoard("Other").boards.single().name)
+    }
+
+    @Test fun failedDeletionCommitPreservesContentActiveIdentityAndIndex() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ArrayDeque(listOf("one")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        storage.createBoard("One")
+        val index = File(root, "boards.index").readBytes()
+        val manifest = File(storage.directoryFor("one"), "board.json").readBytes()
+        val failing = BoardCollectionStorage(root, legacy, atomicReplace = { _, _ -> error("injected deletion failure") })
+        try { failing.deleteBoard("one"); fail("Expected deletion failure") }
+        catch (expected: IllegalStateException) { assertEquals("injected deletion failure", expected.message) }
+        assertArrayEquals(index, File(root, "boards.index").readBytes())
+        assertArrayEquals(manifest, File(storage.directoryFor("one"), "board.json").readBytes())
+        assertNull(storage.recoverDeletions())
+        assertTrue(storage.directoryFor("one").exists())
+    }
+
+    @Test fun cleanupFailureRetainsRecoveryMarkerAndRetryNeverTouchesSurvivingBoard() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ArrayDeque(listOf("one", "two")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        storage.createBoard("One")
+        storage.createBoard("Two")
+        val failing = BoardCollectionStorage(root, legacy, atomicReplace = ::atomicMove, removeDirectory = { false })
+        val result = failing.deleteBoard("one")
+        assertNotNull(result.cleanupError)
+        assertEquals("two", result.collection.activeBoardId)
+        assertTrue(File(root, "pending-deletions/one").isFile)
+        assertTrue(storage.directoryFor("one").exists())
+        assertNull(storage.recoverDeletions())
+        assertFalse(storage.directoryFor("one").exists())
+        assertTrue(storage.directoryFor("two").exists())
+        assertFalse(File(root, "pending-deletions/one").exists())
+    }
+
+    @Test fun staleCleanupMarkerForOwnedBoardCannotRemoveAssets() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ArrayDeque(listOf("one")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        storage.createBoard("One")
+        File(root, "pending-deletions/one").apply { parentFile!!.mkdirs(); writeText("one") }
+        assertNull(storage.recoverDeletions())
+        assertTrue(storage.directoryFor("one").exists())
+    }
+
     private fun newStorage(root: File, legacy: File) = BoardCollectionStorage(
         root, legacy, validateBoard = ::validateFixture, atomicReplace = ::atomicMove,
     )

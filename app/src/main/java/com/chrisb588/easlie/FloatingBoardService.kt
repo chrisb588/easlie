@@ -316,6 +316,10 @@ class FloatingBoardService : Service() {
         composeOwner = owner
         val boardCanvas = ComposeView(context).apply {
             setContent {
+                val store = (application as EaslieApplication).board
+                androidx.compose.runtime.LaunchedEffect(store.activeBoardId, store.collectionReady) {
+                    if (store.collectionReady && store.activeBoardId == null) returnToFullScreen()
+                }
                 EaslieTheme {
                     FullScreenCanvas(
                         board = (application as EaslieApplication).board,
