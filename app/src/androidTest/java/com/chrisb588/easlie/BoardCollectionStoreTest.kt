@@ -201,6 +201,8 @@ class BoardCollectionStoreTest {
         resolver.call(provider, "create-task-fixtures", null, null)
         val root = File(instrumentation.targetContext.cacheDir, "deletion-${UUID.randomUUID()}")
         lateinit var store: BoardStore
+        val temporaryDirectory = File(System.getProperty("java.io.tmpdir")!!)
+        val before = temporaryDirectory.listFiles().orEmpty().filter { it.name.startsWith("reference-") }.toSet()
         try {
             main { store = BoardStore(File(root, "board"), collectionMigration = true) }
             await { store.collectionReady }
@@ -228,6 +230,8 @@ class BoardCollectionStoreTest {
             resolver.call(provider, "release-reads", null, null)
             await { !store.importing && store.message?.contains("destination board was deleted") == true }
             main { assertEquals(survivor, store.activeBoardId); assertTrue(store.items.isEmpty()) }
+            assertEquals(before, temporaryDirectory.listFiles().orEmpty().filter { it.name.startsWith("reference-") }.toSet())
+            assertTrue(File(root, "boards/$survivor/assets").listFiles().orEmpty().isEmpty())
             assertFalse(File(root, "boards/$deleted").exists())
             assertEquals(listOf(survivor), BoardCollectionStorage(root, File(root, "board")).readCollection().boards.map { it.id })
             assertTrue(BoardStorage(File(root, "boards/$survivor")).load().snapshot.items.isEmpty())
