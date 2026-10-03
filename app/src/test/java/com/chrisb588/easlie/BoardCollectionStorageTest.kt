@@ -334,6 +334,50 @@ class BoardCollectionStorageTest {
         assertTrue(storage.directoryFor("one").exists())
     }
 
+    @Test fun thirtyImageBoardsKeepTransformsStackingNamesAndViewportsAcrossRepeatedOpenAndDeletion() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy, ArrayDeque(listOf("one", "two")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        storage.createBoard("References")
+        storage.createBoard("References")
+        fun populate(id: String, offset: Int): BoardSnapshot {
+            val directory = storage.directoryFor(id)
+            val items = (0 until 30).joinToString(",") { index ->
+                // Identical asset names and source bytes must remain local to each board.
+                File(directory, "assets/source-$index").apply {
+                    parentFile!!.mkdirs()
+                    writeBytes(byteArrayOf(index.toByte(), 42))
+                }
+                """{"id":"item-$index","assetId":"source-$index","x":${index + offset},"y":${-index},"width":160,"height":90,"rotationDegrees":${index * 7},"zIndex":${index * 3}}"""
+            }
+            File(directory, "board.json").writeText(
+                """{"schemaVersion":1,"viewports":{"fullScreen":{"centerX":$offset,"centerY":2,"zoom":2},"floating":{"centerX":${offset + 10},"centerY":4,"zoom":0.5}},"items":[$items]}""",
+            )
+            return BoardStorage(directory).load().snapshot
+        }
+        val first = populate("one", 5)
+        val second = populate("two", 80)
+        storage.renameBoard("one", "References (2)")
+        repeat(12) { iteration ->
+            val id = if (iteration % 2 == 0) "one" else "two"
+            val reopened = storageForManagement(root, legacy)
+            reopened.openBoard(id)
+            assertEquals(reopened.directoryFor(id), reopened.initialize())
+            assertEquals(first, BoardStorage(reopened.directoryFor("one")).load().snapshot)
+            assertEquals(second, BoardStorage(reopened.directoryFor("two")).load().snapshot)
+            assertEquals(id, reopened.readCollection().boards.first().id)
+        }
+        val names = storage.readCollection().boards.associate { it.id to it.name }
+        assertEquals(mapOf("one" to "References (2) (2)", "two" to "References (2)"), names)
+        val survivorAssets = (0 until 30).map { File(storage.directoryFor("two"), "assets/source-$it").readBytes() }
+        assertNull(storage.deleteBoard("one").cleanupError)
+        assertEquals(second, BoardStorage(storage.directoryFor("two")).load().snapshot)
+        survivorAssets.forEachIndexed { index, bytes ->
+            assertArrayEquals(bytes, File(storage.directoryFor("two"), "assets/source-$index").readBytes())
+        }
+        assertFalse(storage.directoryFor("one").exists())
+        assertEquals("two", storageForManagement(root, legacy).readCollection().activeBoardId)
+    }
+
     private fun newStorage(root: File, legacy: File) = BoardCollectionStorage(
         root, legacy, validateBoard = ::validateFixture, atomicReplace = ::atomicMove,
     )
