@@ -143,7 +143,13 @@ class CanvasGestureOwnershipTest {
                 assertEquals(afterLift, board.items.last())
                 assertEquals(initial, board.viewportFor(floating))
             }
+            // Deselect stays accessible even when there is no exposed canvas background.
+            rule.runOnIdle {
+                board.update(board.items.last().copy(center = initial.center, width = 10000f, height = 10000f))
+            }
+            val selectedFillingCanvas = board.items.toList()
             rule.onNodeWithTag(CanvasTestTags.Deselect).performClick()
+            rule.runOnIdle { assertEquals(selectedFillingCanvas, board.items) }
             val deselected = board.items.toList()
             node.performTouchInput { down(center); moveTo(center + Offset(60f, 0f)); up() }
             rule.runOnIdle { assertEquals(deselected, board.items) }
