@@ -9,6 +9,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.size
 import androidx.test.platform.app.InstrumentationRegistry
+import com.chrisb588.easlie.canvas.CanvasPoint
+import com.chrisb588.easlie.canvas.CanvasSize
 import com.chrisb588.easlie.canvas.CanvasTestTags
 import com.chrisb588.easlie.canvas.FullScreenCanvas
 import org.junit.Assert.assertEquals
@@ -89,5 +91,27 @@ class CanvasGestureOwnershipTest {
             up(0)
         }
         rule.runOnIdle { assertEquals(initial, board.viewportFor(floating)) }
+        val beforeResize = board.items.last()
+        node.performTouchInput {
+            val point = initial.worldToWindow(beforeResize.corner(1f, 1f), CanvasSize(width.toFloat(), height.toFloat()))
+            val corner = Offset(point.x, point.y)
+            down(corner); moveTo(corner + Offset(45f, 45f)); up()
+        }
+        rule.runOnIdle {
+            assertEquals(initial, board.viewportFor(floating))
+            assertNotEquals(beforeResize.width, board.items.last().width)
+        }
+        val beforeRotate = board.items.last()
+        val density = instrumentation.targetContext.resources.displayMetrics.density
+        node.performTouchInput {
+            val world = beforeRotate.localToWorld(CanvasPoint(0f, -beforeRotate.height / 2f - 36f * density))
+            val point = initial.worldToWindow(world, CanvasSize(width.toFloat(), height.toFloat()))
+            val handle = Offset(point.x, point.y)
+            down(handle); moveTo(handle + Offset(60f, 0f)); up()
+        }
+        rule.runOnIdle {
+            assertEquals(initial, board.viewportFor(floating))
+            assertNotEquals(beforeRotate.rotationDegrees, board.items.last().rotationDegrees)
+        }
     }
 }
