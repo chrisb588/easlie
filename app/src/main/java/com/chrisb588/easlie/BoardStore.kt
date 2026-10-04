@@ -118,14 +118,15 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
             migrationFailed = false
             ready = true
         } catch (failure: Exception) {
+            Log.e("BoardStore", "Board storage initialization failed", failure)
             writable = false
             if (collectionStorage != null) {
                 migrationFailed = true
                 ready = false
                 message = if (collectionStorage.hasCollection) {
-                    "Board collection could not be opened. Retry to continue: ${failure.message}"
+                    "We couldn't open your saved board. Tap Retry to try again."
                 } else {
-                    "Board migration failed. Your original board is safe. Retry to continue: ${failure.message}"
+                    "We couldn't prepare your board. Your original board is safe. Tap Retry to try again."
                 }
             } else {
                 message = "Board could not be loaded. Storage is read-only: ${failure.message}"

@@ -130,6 +130,10 @@ class BoardStorePersistenceTest {
         try {
             onMain { store = BoardStore(legacy, collectionMigration = true) }
             await { store!!.migrationFailed }
+            onMain {
+                assertEquals("We couldn't prepare your board. Your original board is safe. Tap Retry to try again.",
+                    store!!.message)
+            }
             val attempted = BoardItem("blocked", CanvasPoint(1f, 2f), 30f, 20f, zIndex = 10, assetId = "blocked")
             onMain {
                 assertFalse(store!!.canEdit)
