@@ -65,9 +65,9 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     private var activeCanvasOwner by mutableStateOf<Any?>(null)
     private val mutex = Mutex()
     private val pending = ArrayDeque<Pair<ContentResolver, List<Uri>>>()
-    private var writable = true
+    private var writable by mutableStateOf(true)
     private var dirty = false
-    private var ready = storage == null && collectionStorage == null
+    private var ready by mutableStateOf(storage == null && collectionStorage == null)
     private var reconciliationReferences = emptySet<String>()
 
     init {
