@@ -26,13 +26,13 @@ class EaslieApplication : Application() {
     val board by lazy {
         val memoryClass = (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).memoryClass
         BoardStore(File(filesDir, "board"), memoryClass.toLong() * 1024 * 1024 / 8,
-            applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
+            applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0, collectionMigration = true)
     }
 }
 
 /** One authoritative board. All edits and disk snapshots pass through the same mutex. */
 class BoardStore internal constructor(directory: File? = null, cacheBudget: Long = 16L * 1024 * 1024,
-    profileImages: Boolean = false) {
+    profileImages: Boolean = false, collectionMigration: Boolean = false) {
     var items by mutableStateOf<List<BoardItem>>(emptyList())
         private set
     val images: Map<String, ImageBitmap> get() = renderer.images
@@ -51,8 +51,13 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     var message by mutableStateOf<String?>(null)
     var importing by mutableStateOf(false)
         private set
+    var migrationFailed by mutableStateOf(false)
+        private set
+    val canEdit: Boolean get() = ready && writable && !migrationFailed
 
-    private val storage = directory?.let { BoardStorage(it) }
+    private val collectionStorage = if (collectionMigration && directory != null)
+        BoardCollectionStorage(directory.parentFile ?: directory, directory) else null
+    private var storage: BoardStorage? = if (collectionStorage == null) directory?.let { BoardStorage(it) } else null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val renderer = ImageRenderer(scope, cacheBudget, profileImages)
     private val sources = mutableMapOf<String, ImageSource>()
@@ -60,68 +65,105 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     private var activeCanvasOwner by mutableStateOf<Any?>(null)
     private val mutex = Mutex()
     private val pending = ArrayDeque<Pair<ContentResolver, List<Uri>>>()
-    private var writable = true
+    private var writable by mutableStateOf(true)
     private var dirty = false
-    private var ready = storage == null
+    private var ready by mutableStateOf(storage == null && collectionStorage == null)
     private var reconciliationReferences = emptySet<String>()
 
     init {
         scope.launch {
             mutex.withLock {
-                try {
-                    val restored = withContext(Dispatchers.IO) { storage?.load() }
-                    if (restored != null) {
-                        fullScreen = restored.snapshot.fullScreen
-                        floating = restored.snapshot.floating
-                        var unreadable = 0
-                        val restoredItems = mutableListOf<BoardItem>()
-                        for (item in restored.snapshot.items) {
-                            try {
-                                val source = withContext(Dispatchers.IO) { readImageSource(storage!!.asset(item.assetId)) }
-                                sources[item.id] = source
-                                restoredItems.add(item)
-                            } catch (failure: Exception) {
-                                unreadable++
-                                Log.w("BoardStore", "Cannot decode restored asset ${item.assetId}", failure)
-                            }
-                        }
-                        items = restoredItems
-                        val skipped = restored.skipped + unreadable
-                        if (skipped > 0) message = "$skipped item(s) could not be restored: " +
-                            "${restored.missing} missing asset(s), ${restored.malformed} malformed item(s), " +
-                            "$unreadable unreadable image(s)."
-                        // A later background scan must also preserve referenced but undecodable assets.
-                        reconciliationReferences = restored.referencedAssets
-                    }
-                } catch (failure: Exception) {
-                    writable = false
-                    message = "Board could not be loaded. Storage is read-only: ${failure.message}"
-                }
-                ready = true
+                restoreStorage()
             }
             startPendingImports()
-            scope.launch {
-                if (!writable) return@launch
-                try {
-                    val candidates = withContext(Dispatchers.IO) { storage?.reconciliationCandidates().orEmpty() }
-                    for (file in candidates) {
-                        yield()
-                        mutex.withLock {
-                            // Imports and saves may have changed ownership during discovery.
-                            val referenced = reconciliationReferences + items.map { it.assetId }
-                            withContext(Dispatchers.IO) { storage?.removeUnreferenced(file, referenced) }
-                        }
-                    }
-                } catch (failure: Exception) {
-                    Log.w("BoardStore", "Asset reconciliation failed; retry on next startup", failure)
-                }
-            }
+            reconcileStorage()
         }
         scope.launch {
             while (isActive) {
                 delay(1000)
                 mutex.withLock { if (dirty) saveEdits() }
             }
+        }
+    }
+
+    private suspend fun restoreStorage() {
+        try {
+            storage = withContext(Dispatchers.IO) {
+                collectionStorage?.initialize()?.let(::BoardStorage) ?: storage
+            }
+            val restored = withContext(Dispatchers.IO) { storage?.load() }
+            if (restored != null) {
+                fullScreen = restored.snapshot.fullScreen
+                floating = restored.snapshot.floating
+                var unreadable = 0
+                val restoredItems = mutableListOf<BoardItem>()
+                for (item in restored.snapshot.items) {
+                    try {
+                        val source = withContext(Dispatchers.IO) { readImageSource(storage!!.asset(item.assetId)) }
+                        sources[item.id] = source
+                        restoredItems.add(item)
+                    } catch (failure: Exception) {
+                        unreadable++
+                        Log.w("BoardStore", "Cannot decode restored asset ${item.assetId}", failure)
+                    }
+                }
+                items = restoredItems
+                val skipped = restored.skipped + unreadable
+                if (skipped > 0) message = "$skipped item(s) could not be restored: " +
+                    "${restored.missing} missing asset(s), ${restored.malformed} malformed item(s), " +
+                    "$unreadable unreadable image(s)."
+                reconciliationReferences = restored.referencedAssets
+            }
+            writable = true
+            migrationFailed = false
+            ready = true
+        } catch (failure: Exception) {
+            Log.e("BoardStore", "Board storage initialization failed", failure)
+            writable = false
+            if (collectionStorage != null) {
+                migrationFailed = true
+                ready = false
+                message = if (collectionStorage.hasCollection) {
+                    "We couldn't open your saved board. Tap Retry to try again."
+                } else {
+                    "We couldn't prepare your board. Your original board is safe. Tap Retry to try again."
+                }
+            } else {
+                message = "Board could not be loaded. Storage is read-only: ${failure.message}"
+                ready = true
+            }
+        }
+    }
+
+    fun retryMigration() {
+        if (collectionStorage == null || !migrationFailed) return
+        scope.launch {
+            mutex.withLock {
+                ready = false
+                writable = true
+                message = null
+                restoreStorage()
+            }
+            if (canEdit) {
+                startPendingImports()
+                reconcileStorage()
+            }
+        }
+    }
+
+    private suspend fun reconcileStorage() {
+        if (!writable || !ready) return
+        try {
+            val candidates = withContext(Dispatchers.IO) { storage?.reconciliationCandidates().orEmpty() }
+            for (file in candidates) {
+                yield()
+                mutex.withLock {
+                    val referenced = reconciliationReferences + items.map { it.assetId }
+                    withContext(Dispatchers.IO) { storage?.removeUnreferenced(file, referenced) }
+                }
+            }
+        } catch (failure: Exception) {
+            Log.w("BoardStore", "Asset reconciliation failed; retry on next startup", failure)
         }
     }
 
@@ -176,9 +218,10 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     renderer.remove(id)
                     val source = sources.remove(id)
                     if (remaining.none { it.assetId == item.assetId }) {
+                        val currentStorage = storage
                         withContext(Dispatchers.IO) {
-                            if (storage != null) {
-                                storage.removeUnreferenced(storage.asset(item.assetId), reconciliationReferences)
+                            if (currentStorage != null) {
+                                currentStorage.removeUnreferenced(currentStorage.asset(item.assetId), reconciliationReferences)
                             } else {
                                 source?.file?.delete()
                             }
@@ -239,13 +282,14 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     for (uri in uris) {
                         val asset = try {
                             mutex.withLock {
+                                val currentStorage = storage
                                 withContext(Dispatchers.IO) {
-                                    if (storage != null) {
-                                        val imported = storage.import(resolver, uri)
+                                    if (currentStorage != null) {
+                                        val imported = currentStorage.import(resolver, uri)
                                         try {
-                                            imported.id to readImageSource(storage.asset(imported.id))
+                                            imported.id to readImageSource(currentStorage.asset(imported.id))
                                         } catch (failure: Exception) {
-                                            storage.asset(imported.id).delete()
+                                            currentStorage.asset(imported.id).delete()
                                             throw failure
                                         } finally { imported.bitmap.recycle() }
                                     } else {
