@@ -23,7 +23,33 @@ board isolation, and rename/switch during import; deletion during copy also asse
 that abandoned staging and survivor assets remain clean. `BoardStorePersistenceTest`
 covers atomic-save failure cleanup without changing existing content.
 
-Android integration tests are compiled but not executed. No Android device
+At implementation time, Android integration tests were compiled but not executed. No Android device
 commands, app installation, launch, or smoke tests are performed for this slice.
 The lead's device run must verify the above integration tests and visible error,
 destination-choice, and retry controls. No UI redesign is included.
+
+## Review verification — 2026-11-05
+
+The rebased debug build was installed and launched on the SM-X616B tablet.
+All 48 host unit tests, lint, and APK builds passed. All 20 targeted device tests
+passed: `PartialImportUiTest`, `ImportRoutingTest`, `BoardCollectionStoreTest`,
+`BoardStorePersistenceTest`, and `images.ImageIntakeTest`.
+
+AC3: `PartialImportUiTest` verifies visible failure names and the retry control,
+retention of a successful image, and retry of a valid image after a temporary
+source-access failure. Invalid content is excluded, and the original committed
+item and exact persisted item/asset counts are checked. The existing temporary
+collection-read failure test additionally verifies retry after a storage problem.
+
+AC7: `python tools/test_stopped_shares.py --serial R52WC032P3A` passed for both
+single and multiple shares. The script force-stops the app and confirms no process
+exists before an external sender delivers the intent. It checks saved destination
+identity, committed assets, another board's isolation, and no replay on launcher
+return. Existing app files are temporarily moved aside and restored in `finally`.
+The routing integration tests cover destination choice, mixed inputs, retry after
+switching and renaming, and destination deletion.
+
+`ImageIntakeTest` now returns `Unit` for JUnit and accesses external fixtures
+through the provider instead of the test APK's private directory. All three of
+its tests executed successfully. Lead smoke tests for remaining user flows are
+still pending; the PR has not been merged.

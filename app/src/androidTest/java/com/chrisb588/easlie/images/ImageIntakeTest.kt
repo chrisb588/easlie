@@ -8,11 +8,10 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
-import java.io.File
 import kotlinx.coroutines.runBlocking
 
 class ImageIntakeTest {
-    private val context get() = InstrumentationRegistry.getInstrumentation().context
+    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private fun uri(name: String) = Uri.parse("content://com.chrisb588.easlie.test.images/$name")
 
     @Test
@@ -33,35 +32,52 @@ class ImageIntakeTest {
     }
 
     @Test
-    fun sourcePixelsAreSubsampledAndExifOrientationIsApplied() = runBlocking {
-        val file = File(context.filesDir, "rotated.jpg")
+    fun sourcePixelsAreSubsampledAndExifOrientationIsApplied() = runBlocking<Unit> {
+        val sourceUri = uri("intake-rotated.jpg")
         val original = Bitmap.createBitmap(2400, 1200, Bitmap.Config.ARGB_8888)
-        file.outputStream().use { original.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        original.recycle()
-        ExifInterface(file).apply {
-            setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_90.toString())
-            saveAttributes()
+        try {
+            context.contentResolver.openOutputStream(sourceUri)!!.use {
+                original.compress(Bitmap.CompressFormat.JPEG, 90, it)
+            }
+        } finally { original.recycle() }
+        try {
+            context.contentResolver.openFileDescriptor(sourceUri, "rw")!!.use {
+                ExifInterface(it.fileDescriptor).apply {
+                    setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_90.toString())
+                    saveAttributes()
+                }
+            }
+            val source = copyImageSource(context.contentResolver, sourceUri, context.cacheDir)
+            try {
+                val loaded = source.decode(4)
+                try {
+                    assertTrue(loaded.height > loaded.width)
+                    assertTrue(maxOf(loaded.width, loaded.height) <= 1024)
+                } finally { loaded.recycle() }
+            } finally { source.file.delete() }
+        } finally {
+            context.contentResolver.delete(sourceUri, null, null)
         }
-        val source = copyImageSource(context.contentResolver, uri(file.name), context.cacheDir)
-        val loaded = source.decode(4)
-        assertTrue(loaded.height > loaded.width)
-        assertTrue(maxOf(loaded.width, loaded.height) <= 1024)
-        loaded.recycle()
-        source.file.delete()
-        file.delete()
     }
 
     @Test
     fun unsupportedMissingAndCorruptInputsAreRejected() = runBlocking {
-        File(context.filesDir, "unsupported.txt").writeText("not an image")
-        File(context.filesDir, "corrupt.png").writeText("not a png")
-        for (name in listOf("unsupported.txt", "corrupt.png", "missing.png")) {
-            try {
-                copyImageSource(context.contentResolver, uri(name), context.cacheDir)
-                fail("Expected rejection of $name")
-            } catch (_: Exception) {
-                // A rejected source must never yield a bitmap for the store to append.
+        val names = listOf("intake-unsupported.txt", "intake-corrupt.png", "intake-missing.png")
+        try {
+            names.take(2).forEach { name ->
+                context.contentResolver.openOutputStream(uri(name))!!.use { it.write("not an image".toByteArray()) }
             }
+            context.contentResolver.delete(uri(names.last()), null, null)
+            for (name in names) {
+                try {
+                    copyImageSource(context.contentResolver, uri(name), context.cacheDir)
+                    fail("Expected rejection of $name")
+                } catch (_: Exception) {
+                    // A rejected source must never yield a bitmap for the store to append.
+                }
+            }
+        } finally {
+            names.forEach { context.contentResolver.delete(uri(it), null, null) }
         }
     }
 }
