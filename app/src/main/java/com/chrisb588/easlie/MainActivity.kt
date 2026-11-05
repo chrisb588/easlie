@@ -199,7 +199,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun FloatingBoardScreen(
+internal fun FloatingBoardScreen(
     board: BoardStore,
     onAddImages: () -> Unit,
     overlayPermissionGranted: Boolean,
