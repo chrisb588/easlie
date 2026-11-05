@@ -147,6 +147,22 @@ class BoardCollectionStorageTest {
         assertEquals(opened, storage.readCollection())
     }
 
+    @Test fun namesRejectBlanksAndUseFirstUnusedNumberedSuffix() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy,
+            ids = ArrayDeque(listOf("first", "third", "second", "fourth")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        val before = File(root, "boards.index").readBytes()
+        try { storage.createBoard("   "); fail("Expected blank-name rejection") }
+        catch (expected: IllegalArgumentException) { assertEquals("Board name is empty", expected.message) }
+        assertArrayEquals(before, File(root, "boards.index").readBytes())
+        storage.createBoard("Board 1")
+        storage.createBoard("Board 1 (3)")
+        assertEquals("Board 1 (2)", storage.createBoard("Board 1").boards.first().name)
+        assertEquals("Board 1 (4)", storage.createBoard("Board 1").boards.first().name)
+        assertEquals(listOf("Board 1 (4)", "Board 1 (2)", "Board 1 (3)", "Board 1"),
+            storage.readCollection().boards.map { it.name })
+    }
+
     @Test fun missingActiveBoardReturnsToManagementWithoutChangingTheCollection() = withDirectories { root, legacy ->
         val storage = storageForManagement(root, legacy)
         val collection = BoardCollection("missing", listOf(StoredBoard("present", "Here")))

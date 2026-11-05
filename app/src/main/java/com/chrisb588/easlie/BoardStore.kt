@@ -32,7 +32,8 @@ class EaslieApplication : Application() {
 
 /** The active board and all destination-bound edits share one serialization mutex. */
 class BoardStore internal constructor(directory: File? = null, cacheBudget: Long = 16L * 1024 * 1024,
-    profileImages: Boolean = false, collectionMigration: Boolean = false) {
+    profileImages: Boolean = false, collectionMigration: Boolean = false,
+    private val discoverReconciliation: (BoardStorage) -> List<File> = { it.reconciliationCandidates() }) {
     var items by mutableStateOf<List<BoardItem>>(emptyList())
         private set
     val images: Map<String, ImageBitmap> get() = renderer.images
@@ -85,10 +86,9 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     init {
         scope.launch {
             mutex.withLock {
-                restoreStorage()
+                restoreStorage(reconcile = true)
             }
             startPendingImports()
-            reconcileStorage()
         }
         scope.launch {
             while (isActive) {
@@ -98,7 +98,7 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
         }
     }
 
-    private suspend fun restoreStorage() {
+    private suspend fun restoreStorage(reconcile: Boolean = false) {
         try {
             storage = withContext(Dispatchers.IO) {
                 if (collectionStorage != null) {
@@ -140,6 +140,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
             if (collectionStorage != null && activeBoardId == null && boards.isNotEmpty()) {
                 message = "The previous board is unavailable. Open or create a board."
             }
+            // Startup cleanup finishes under the switch lock before imports or edits can start.
+            if (reconcile) reconcileStorage()
             writable = true
             migrationFailed = false
             ready = true
@@ -191,25 +193,19 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                 ready = false
                 writable = true
                 message = null
-                restoreStorage()
+                restoreStorage(reconcile = true)
             }
-            if (canEdit) {
-                startPendingImports()
-                reconcileStorage()
-            }
+            if (canEdit) startPendingImports()
         }
     }
 
+    /** Called only during restoration, with the mutation lock held and editing disabled. */
     private suspend fun reconcileStorage() {
-        if (!writable || !ready) return
+        val destination = storage ?: return
+        val referenced = reconciliationReferences + items.map { it.assetId }
         try {
-            val candidates = withContext(Dispatchers.IO) { storage?.reconciliationCandidates().orEmpty() }
-            for (file in candidates) {
-                yield()
-                mutex.withLock {
-                    val referenced = reconciliationReferences + items.map { it.assetId }
-                    withContext(Dispatchers.IO) { storage?.removeUnreferenced(file, referenced) }
-                }
+            withContext(Dispatchers.IO) {
+                discoverReconciliation(destination).forEach { destination.removeUnreferenced(it, referenced) }
             }
         } catch (failure: Exception) {
             Log.w("BoardStore", "Asset reconciliation failed; retry on next startup", failure)
