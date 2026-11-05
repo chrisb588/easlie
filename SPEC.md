@@ -147,8 +147,9 @@ transform.
 
 Gesture recognition must distinguish a tap from a drag using the platform's touch
 slop. Once a gesture becomes a canvas gesture, it must not select or transform an
-image when the fingers lift. Crossing another image during a canvas drag must not
-change the gesture's target.
+image when the fingers lift. Once a gesture becomes a canvas gesture, it remains
+a canvas gesture until all fingers lift; it must not select or transform an image
+during the gesture or on release.
 
 ### Multiple independent boards
 
