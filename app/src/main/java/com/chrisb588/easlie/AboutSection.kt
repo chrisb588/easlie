@@ -19,10 +19,10 @@ internal fun AboutSection() {
     if (open) {
         AlertDialog(
             onDismissRequest = { open = false },
-            title = { Text(stringResource(R.string.about)) },
+            title = { Text(stringResource(R.string.about_title)) },
             text = {
                 Column {
-                    Text(stringResource(R.string.app_name))
+                    Text(stringResource(R.string.about_name, stringResource(R.string.app_name)))
                     Text(stringResource(R.string.about_version, BuildConfig.VERSION_NAME))
                 }
             },

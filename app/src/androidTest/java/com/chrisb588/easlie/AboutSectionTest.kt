@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.chrisb588.easlie.ui.theme.Appearance
 import com.chrisb588.easlie.ui.theme.EaslieTheme
@@ -33,18 +34,36 @@ class AboutSectionTest {
                 .performClick()
             for (appearance in Appearance.entries) {
                 compose.runOnIdle { app.appearance.select(appearance) }
-                compose.onNodeWithText("easlie").assertIsDisplayed()
-                compose.onNodeWithText("Version $installedVersion").assertIsDisplayed()
-                compose.onNodeWithText("Close About")
+                compose.onNodeWithText("About easlie").assertIsDisplayed()
+                compose.onNodeWithText("Name: easlie").assertIsDisplayed()
+                compose.onNodeWithText("Version: v$installedVersion").assertIsDisplayed()
+                compose.onNodeWithText("Close")
                     .assertHasClickAction()
                     .assertTouchHeightIsEqualTo(48.dp)
                     .assertWidthIsAtLeast(48.dp)
             }
-            compose.onNodeWithText("Close About").performClick()
+            compose.onNodeWithText("Close").performClick()
             compose.onNodeWithText("About").assertIsDisplayed().performClick()
-            compose.onNodeWithText("Version $installedVersion").assertIsDisplayed()
+            compose.onNodeWithText("Version: v$installedVersion").assertIsDisplayed()
         } finally {
             compose.runOnIdle { app.appearance.select(original) }
+        }
+    }
+
+    @Test fun aboutIsReachableFromMainActivityAndShowsInstalledMetadata() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        @Suppress("DEPRECATION")
+        val installedVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        ActivityScenario.launch(MainActivity::class.java).use {
+            compose.onNodeWithText("About").assertIsDisplayed().performClick()
+            compose.onNodeWithText("About easlie").assertIsDisplayed()
+            compose.onNodeWithText("Name: easlie").assertIsDisplayed()
+            compose.onNodeWithText("Version: v$installedVersion").assertIsDisplayed()
+            compose.onNodeWithText("Close").assertIsDisplayed().performClick()
+            compose.onNodeWithText("About easlie").assertDoesNotExist()
+            compose.onNodeWithText("About").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Version: v$installedVersion").assertIsDisplayed()
+            compose.onNodeWithText("Close").performClick()
         }
     }
 }
