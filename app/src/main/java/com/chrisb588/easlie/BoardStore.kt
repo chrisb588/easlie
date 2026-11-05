@@ -23,6 +23,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class EaslieApplication : Application() {
+    val appearance by lazy {
+        com.chrisb588.easlie.ui.theme.AppearanceStore(getSharedPreferences(
+            com.chrisb588.easlie.ui.theme.AppearanceStore.PREFERENCES, Context.MODE_PRIVATE
+        ))
+    }
     val board by lazy {
         val memoryClass = (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).memoryClass
         BoardStore(File(filesDir, "board"), memoryClass.toLong() * 1024 * 1024 / 8,
