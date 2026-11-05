@@ -16,9 +16,11 @@ import java.io.IOException;
 public class IntakeTestProvider extends ContentProvider {
     private volatile boolean holdReads;
     private volatile boolean readStarted;
+    private volatile String failNextRead;
     @Override public boolean onCreate() { return true; }
 
     @Override public Bundle call(String method, String arg, Bundle extras) {
+        if ("fail-next-read".equals(method)) { failNextRead = arg; return Bundle.EMPTY; }
         if ("hold-reads".equals(method)) { holdReads = true; readStarted = false; return Bundle.EMPTY; }
         if ("release-reads".equals(method)) { holdReads = false; return Bundle.EMPTY; }
         if ("read-started".equals(method)) { Bundle result = new Bundle(); result.putBoolean("started", readStarted); return result; }
@@ -51,6 +53,10 @@ public class IntakeTestProvider extends ContentProvider {
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         String name = uri.getLastPathSegment();
         if (name == null || !name.matches("[a-zA-Z0-9.-]+") || name.equals(".") || name.equals("..")) throw new FileNotFoundException("Invalid fixture name");
+        if (mode.equals("r") && name.equals(failNextRead)) {
+            failNextRead = null;
+            throw new FileNotFoundException("Temporary source access failure");
+        }
         if (mode.equals("r") && holdReads) {
             readStarted = true;
             long deadline = android.os.SystemClock.uptimeMillis() + 10000;

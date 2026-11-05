@@ -287,6 +287,10 @@ internal fun FloatingBoardScreen(
         Button(onClick = onAddImages, enabled = board.canEdit) {
             Text(if (board.importing) "Importing… Add images" else "Add images")
         }
+        if (board.awaitingImportDestination) Text("Shared images are waiting. Create or open their destination board.")
+        if (board.canRetryImport) {
+            TextButton(enabled = !board.importing, onClick = board::retryImport) { Text("Retry failed images") }
+        }
         board.message?.let { message ->
             Row {
                 val color = if (message.startsWith("Board renamed to ")) MaterialTheme.colorScheme.primary
