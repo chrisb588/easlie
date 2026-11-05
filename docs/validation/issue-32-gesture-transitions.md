@@ -4,9 +4,12 @@ A second pointer newly placed on a selected image's current resize corner during
 an established image move starts proportional resizing. The transition captures
 its displayed geometry and the pointers' distance. Subsequent distance changes
 scale that geometry around its captured center. Translation of the midpoint does
-not translate or rotate the image. Once either resizing pointer lifts, remaining
-pointers stay inactive until all lift. The existing corner resize retains its
-opposite anchor.
+not translate or rotate the image. When either resizing pointer lifts, the
+remaining finger resumes dragging the image from its displayed position and
+size. Lifting a finger causes no jump, and a later second finger on a current
+corner can start resizing again. The gesture never transfers to canvas control;
+all fingers must lift before a fresh canvas gesture. The existing corner resize
+retains its opposite anchor.
 
 The shared canvas supplies an accessible Deselect image button for both hosts.
 Its final placement remains part of issues #19 and #20.
@@ -18,13 +21,26 @@ A fresh gesture after every pointer lifts resumes normal panning. This is the
 specification's permitted safe fallback.
 
 Pointer coroutine cancellation and host disposal retain the latest board item
-values and invoke the existing save path. No rollback is applied.
+values and invoke the existing save path. No rollback is applied. Double-tap
+history survives selection-triggered pointer-handler restarts so selecting an
+image on the first tap does not prevent the second tap from opening Delete.
 
-Host validation: debug unit tests and lint passed. Android instrumentation sources
-compiled. Tests cover both hosts, second-pointer placement, fixed-center distance
-resizing, aspect ratio and rotation, midpoint movement, pointer lift ownership,
-corner anchoring, explicit deselection, cancellation persistence, fresh input after
-cancellation, and canvas-pinch remaining-pointer inactivity.
+Validation on 2026-11-05: 49 debug unit tests, lint, and diff checks passed. The
+updated app was installed and launched on the connected Samsung SM-X616B before
+AC verification. All 18 targeted Android tests passed: CanvasGestureOwnershipTest
+(6), CanvasResizeContinuationTest (4), CanvasInterruptionTest (6), and
+CanvasViewportOwnershipTest (2).
 
-Android instrumentation execution and the lead's device smoke tests are pending.
-No device command, app install, launch, or device test was performed.
+Coverage includes both canvas modes, each resize finger lifting first, repeated
+resize-to-drag transitions, unchanged geometry on pointer lift, and double taps
+with recomposition between taps. Cancellation tests wait for the displayed move,
+rotation, or resize before cancellation, then compare that exact transform with
+the saved snapshot. Canvas-removal tests remove the composable while pointers
+are down, verify its displayed transform on disk, remount it, and verify a fresh
+drag and subsequent save. These use temporary boards.
+
+AC5 is verified for injected touch cancellation and canvas removal in both modes.
+Activity recreation, service restart, and abrupt process death were not tested.
+If additional fingers cause the resizing pair to lose ownership, the remaining
+touches stay inactive until all fingers lift. The lead's AC4 user-flow check
+remains pending.

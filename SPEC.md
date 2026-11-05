@@ -129,7 +129,8 @@ corner fixed.
 A second finger elsewhere must not start canvas manipulation. To manipulate the
 canvas after image manipulation, the user must lift all fingers and start a fresh
 canvas gesture. Lifting a finger after two-finger image resizing must not transfer
-the remaining finger to canvas panning.
+the remaining finger to canvas panning. Instead, the remaining finger resumes
+dragging the image from its current position and size, without a jump.
 
 Continuing to pan with the remaining finger after a two-finger canvas pinch is a
 good-to-have v0.2.0 behavior. Attempt to implement it without a viewport jump or

@@ -63,6 +63,9 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
     var selectedId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var menuId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
+    var lastTapTime by remember(board.activeBoardId) { mutableStateOf(0L) }
+    var lastTapId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
+    var lastTapPosition by remember(board.activeBoardId) { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current.density
     val imageOwner = remember(board) { Any() }
     val interactive = board.isActiveCanvas(imageOwner)
@@ -94,9 +97,6 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                 .semantics { contentDescription = "Reference image board. Tap to select; drag a selected image or its handles. Double-tap for Delete." }
                 .pointerInput(board.activeBoardId, interactive, board, handleRadius, rotationGap, selectedId) {
                     if (!interactive) return@pointerInput
-                    var lastTapTime = 0L
-                    var lastTapId: String? = null
-                    var lastTapPosition = Offset.Zero
                     awaitEachGesture {
                         val down = awaitFirstDown()
                         try {
@@ -135,6 +135,8 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                 else -> DragKind.Pan
                             }
                             val initialItem = if (kind == DragKind.Resize || kind == DragKind.Rotate) selected else hit
+                            var moveItem = initialItem
+                            var movePointer = down.id
                             var dragged = false
                             var viewportGesture = false
                             var twoFingerItem: BoardItem? = null
@@ -162,8 +164,8 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                 } else if (pressed >= 2) {
                                     // Transition only when a new second finger lands on a current resize corner.
                                     if (pressed == 2 && kind == DragKind.Move && twoFingerItem == null && !imagePointersEnded) {
-                                        val first = event.changes.firstOrNull { it.id == down.id && it.pressed }
-                                        val second = event.changes.firstOrNull { it.id != down.id && it.pressed && !it.previousPressed }
+                                        val first = event.changes.firstOrNull { it.id == movePointer && it.pressed }
+                                        val second = event.changes.firstOrNull { it.id != movePointer && it.pressed && !it.previousPressed }
                                         val current = board.items.firstOrNull { it.id == initialItem?.id }
                                         if (first != null && second != null && current != null) {
                                             val viewport = board.viewportFor(floatingMode)
@@ -179,7 +181,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                             }
                                         }
                                     }
-                                    val first = event.changes.firstOrNull { it.id == down.id && it.pressed }
+                                    val first = event.changes.firstOrNull { it.id == movePointer && it.pressed }
                                     val second = event.changes.firstOrNull { it.id == resizePointer && it.pressed }
                                     if (twoFingerItem != null && !imagePointersEnded) {
                                         if (first == null || second == null) imagePointersEnded = true
@@ -188,10 +190,17 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                     }
                                     event.changes.forEach { if (it.pressed) it.consume() }
                                 } else if (pressed == 1 && twoFingerItem != null) {
-                                    imagePointersEnded = true
+                                    if (!imagePointersEnded) {
+                                        // Continue from the displayed geometry, without reusing the pre-resize drag delta.
+                                        moveItem = board.items.firstOrNull { it.id == initialItem?.id }
+                                        movePointer = event.changes.first { it.pressed }.id
+                                        totalDelta = Offset.Zero
+                                        twoFingerItem = null
+                                        resizePointer = null
+                                    }
                                     event.changes.forEach { if (it.pressed) it.consume() }
                                 } else if (pressed == 1 && !viewportGesture) {
-                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    val change = event.changes.firstOrNull { it.id == movePointer } ?: break
                                     val delta = change.positionChange()
                                     totalDelta += delta
                                     if (!dragged && totalDelta.getDistance() > viewConfiguration.touchSlop) {
@@ -201,7 +210,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                     if (dragged) {
                                         when (kind) {
                                             DragKind.Pan -> board.setViewport(viewportAtStart.pannedBy(totalDelta.toCanvasPoint()), floatingMode)
-                                            DragKind.Move -> initialItem?.let {
+                                            DragKind.Move -> moveItem?.let {
                                                 board.update(it.copy(center = it.center + totalDelta.toCanvasPoint() / viewportAtStart.zoom))
                                             }
                                             DragKind.Resize -> if (initialItem != null && handle != null) {

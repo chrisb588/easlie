@@ -220,7 +220,7 @@ class CanvasGestureOwnershipTest {
                 assertEquals(beforeMidpoint.center, afterLift.center)
                 assertEquals(beforeMidpoint.width, afterLift.width, 0.01f)
                 assertEquals(beforeMidpoint.height, afterLift.height, 0.01f)
-                assertEquals(afterLift, board.items.last())
+                assertEquals(afterLift.copy(center = afterLift.center + CanvasPoint(80f / initial.zoom, 0f)), board.items.last())
                 assertEquals(initial, board.viewportFor(floating))
             }
             // Deselect stays accessible even when there is no exposed canvas background.
@@ -260,11 +260,15 @@ class CanvasGestureOwnershipTest {
                 val world = beforeRotate.localToWorld(CanvasPoint(0f, -beforeRotate.height / 2f - 36f * density))
                 val point = initial.worldToWindow(world, CanvasSize(width.toFloat(), height.toFloat()))
                 val handle = Offset(point.x, point.y)
-                down(handle); moveTo(handle + Offset(60f, 0f)); cancel()
+                down(handle); moveTo(handle + Offset(60f, 0f))
             }
+            rule.waitUntil(5000) { beforeRotate.rotationDegrees != board.items.last().rotationDegrees }
+            val displayedRotation = board.items.toList()
+            node.performTouchInput { cancel() }
             rule.runOnIdle {
                 assertEquals(initial, board.viewportFor(floating))
                 assertNotEquals(beforeRotate.rotationDegrees, board.items.last().rotationDegrees)
+                assertEquals(displayedRotation, board.items)
             }
             val interrupted = board.items.toList()
             rule.waitUntil(5000) {
@@ -279,30 +283,38 @@ class CanvasGestureOwnershipTest {
             val beforeCanceledMove = board.items.last()
             node.performTouchInput {
                 val point = initial.worldToWindow(beforeCanceledMove.center, CanvasSize(width.toFloat(), height.toFloat()))
-                down(Offset(point.x, point.y)); moveBy(Offset(45f, 0f)); cancel()
+                down(Offset(point.x, point.y)); moveBy(Offset(45f, 0f))
             }
+            rule.waitUntil(5000) { beforeCanceledMove.center != board.items.last().center }
+            val displayedMove = board.items.toList()
+            node.performTouchInput { cancel() }
             val canceledMove = board.items.toList()
-            rule.runOnIdle { assertNotEquals(beforeCanceledMove.center, canceledMove.last().center) }
+            rule.runOnIdle { assertEquals(displayedMove, canceledMove) }
             rule.waitUntil(5000) {
                 runCatching { BoardStorage(directory).load().snapshot.items == canceledMove }.getOrDefault(false)
             }
             rule.runOnIdle {
                 board.update(board.items.last().copy(center = initial.center, width = 200f, height = 200f))
             }
+            rule.waitUntil(5000) { board.items.last().center == initial.center && board.items.last().width == 200f }
             val resizeStart = board.items.last()
             // Cancel after the two-finger transition, retaining its displayed center and size.
             node.performTouchInput {
                 val point = initial.worldToWindow(resizeStart.center, CanvasSize(width.toFloat(), height.toFloat()))
                 down(0, Offset(point.x, point.y)); moveBy(0, Offset(35f, 0f))
             }
+            rule.waitUntil(5000) { board.items.last().center != resizeStart.center }
             val beforeCanceledResize = board.items.last()
             node.performTouchInput {
                 val point = initial.worldToWindow(beforeCanceledResize.corner(1f, 1f), CanvasSize(width.toFloat(), height.toFloat()))
-                down(1, Offset(point.x, point.y)); moveBy(1, Offset(40f, 40f)); cancel()
+                down(1, Offset(point.x, point.y)); moveBy(1, Offset(40f, 40f))
             }
+            rule.waitUntil(5000) { beforeCanceledResize.width != board.items.last().width }
+            val displayedResize = board.items.toList()
+            node.performTouchInput { cancel() }
             val canceledResize = board.items.toList()
             rule.runOnIdle {
-                assertNotEquals(beforeCanceledResize.width, canceledResize.last().width)
+                assertEquals(displayedResize, canceledResize)
                 assertEquals(beforeCanceledResize.center, canceledResize.last().center)
             }
             rule.waitUntil(5000) {
