@@ -2,8 +2,8 @@ package com.chrisb588.easlie
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.test.assertHasClickAction
-import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTouchHeightIsEqualTo
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -28,7 +28,7 @@ class AboutSectionTest {
             compose.setContent { EaslieTheme { Column { AboutSection() } } }
             compose.onNodeWithText("About")
                 .assertHasClickAction()
-                .assertHeightIsAtLeast(48.dp)
+                .assertTouchHeightIsEqualTo(48.dp)
                 .assertWidthIsAtLeast(48.dp)
                 .performClick()
             for (appearance in Appearance.entries) {
@@ -37,7 +37,7 @@ class AboutSectionTest {
                 compose.onNodeWithText("Version $installedVersion").assertIsDisplayed()
                 compose.onNodeWithText("Close About")
                     .assertHasClickAction()
-                    .assertHeightIsAtLeast(48.dp)
+                    .assertTouchHeightIsEqualTo(48.dp)
                     .assertWidthIsAtLeast(48.dp)
             }
             compose.onNodeWithText("Close About").performClick()
