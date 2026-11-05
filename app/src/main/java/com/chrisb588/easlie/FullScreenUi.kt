@@ -26,7 +26,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.chrisb588.easlie.canvas.CanvasTestTags
 import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.AppearanceSettings
@@ -73,14 +82,15 @@ internal fun FloatingBoardScreen(
     BackHandler(enabled = !mainMenu) { home = true; board.save() }
 
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val actionsMenuWidth = minOf(264.dp, (maxWidth - 80.dp).coerceAtLeast(112.dp))
         if (!mainMenu && board.canEdit) {
             FullScreenCanvas(board, deselectRequest = deselectRequest, showDeselectButton = false)
         }
         if (mainMenu) {
             LazyColumn(
-                Modifier.align(Alignment.TopCenter).widthIn(max = 640.dp).fillMaxSize()
+                Modifier.align(Alignment.TopCenter).widthIn(max = 960.dp).fillMaxSize()
                     .padding(horizontal = 24.dp),
-                contentPadding = PaddingValues(top = 80.dp, bottom = 160.dp),
+                contentPadding = PaddingValues(top = (maxHeight * .2f).coerceIn(112.dp, 192.dp), bottom = 160.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {
@@ -92,7 +102,9 @@ internal fun FloatingBoardScreen(
                 item {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("Your boards", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                        RoundControl(UiIcon.Add, "Create board", board.collectionReady, create)
+                        IconButton(onClick = create, enabled = board.collectionReady, modifier = Modifier.size(48.dp)) {
+                            Icon(UiIcon.Add.vector, "Create board", Modifier.size(24.dp))
+                        }
                     }
                 }
                 if (board.boards.isEmpty() && board.collectionReady) {
@@ -111,32 +123,35 @@ internal fun FloatingBoardScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 RoundControl(UiIcon.Home, "Home", onClick = { home = true; board.save() })
-                Box(Modifier.weight(1f, fill = false)) {
-                    Surface(shape = CircleShape, enabled = board.collectionReady, color = MaterialTheme.colorScheme.surfaceContainer, onClick = { boardMenu = true }) {
+                BoxWithConstraints(Modifier.weight(1f, fill = false).width(256.dp)) {
+                    val selectorWidth = maxWidth
+                    Surface(modifier = Modifier.fillMaxWidth(), shape = CircleShape, enabled = board.collectionReady, color = MaterialTheme.colorScheme.surfaceContainer, onClick = { boardMenu = true }) {
                         Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp)
                             .semantics { contentDescription = "Open board" }, verticalAlignment = Alignment.CenterVertically) {
-                            Text(active?.name ?: "Open a board", Modifier.weight(1f, fill = false), maxLines = 1,
+                            Text(active?.name ?: "Open a board", Modifier.weight(1f), maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 fontStyle = if (active == null) FontStyle.Italic else FontStyle.Normal)
                             Icon(UiIcon.Down.vector, null, Modifier.padding(start = 8.dp).size(20.dp))
                         }
                     }
                     DropdownMenu(boardMenu, { boardMenu = false }, shape = menuCorners,
-                        modifier = Modifier.heightIn(max = 360.dp)) {
+                        modifier = Modifier.width(selectorWidth).heightIn(max = 360.dp)) {
                         board.boards.forEach { entry ->
                             DropdownMenuItem(text = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 enabled = board.collectionReady, onClick = { open(entry) })
                         }
                         HorizontalDivider()
-                        DropdownMenuItem(text = { Text("New board +") }, enabled = board.collectionReady, onClick = create)
+                        DropdownMenuItem(text = { Text("New board") },
+                            trailingIcon = { Icon(UiIcon.Add.vector, null, Modifier.size(24.dp)) },
+                            enabled = board.collectionReady, onClick = create)
                     }
                 }
             }
         }
-        Column(Modifier.align(Alignment.TopEnd).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.align(Alignment.TopEnd).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Box {
                 RoundControl(UiIcon.Menu, "Actions", onClick = { actions = true })
-                DropdownMenu(actions, { actions = false }, shape = menuCorners) {
+                SideActionsMenu(actions, { actions = false }, width = actionsMenuWidth) {
                     if (!mainMenu) {
                         DropdownMenuItem(text = { Text("Switch to floating mode") }, enabled = board.canEdit, onClick = {
                             actions = false
@@ -144,7 +159,6 @@ internal fun FloatingBoardScreen(
                         })
                         DropdownMenuItem(text = { Text("Deselect") }, modifier = Modifier.testTag(CanvasTestTags.Deselect),
                             onClick = { deselectRequest++; actions = false })
-                        HorizontalDivider()
                     }
                     DropdownMenuItem(text = { Text("Change theme") }, onClick = { actions = false; appearance = true })
                     DropdownMenuItem(text = { Text("About") }, onClick = { actions = false; about = true })
@@ -189,6 +203,30 @@ internal fun FloatingBoardScreen(
     if (appearance) (LocalContext.current.applicationContext as? EaslieApplication)?.let {
         AppearanceSettings(it.appearance, dialogOnly = true, onClose = { appearance = false })
     }
+}
+
+/** Keep Actions beside its button rather than covering the Add images control below. */
+@Composable
+private fun SideActionsMenu(expanded: Boolean, onDismiss: () -> Unit, width: Dp,
+    content: @Composable ColumnScope.() -> Unit) {
+    if (!expanded) return
+    val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
+    Popup(popupPositionProvider = remember(gap) { SideMenuPositionProvider(gap) },
+        onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
+        Surface(shape = menuCorners, color = MaterialTheme.colorScheme.surfaceContainer,
+            shadowElevation = 8.dp, modifier = Modifier.width(width)) {
+            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp), content = content)
+        }
+    }
+}
+
+internal class SideMenuPositionProvider(private val gap: Int) : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
+        layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset = IntOffset(
+        (anchorBounds.left - popupContentSize.width - gap)
+            .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+        anchorBounds.top.coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
+    )
 }
 
 @Composable
@@ -245,9 +283,9 @@ private fun NoticeStack(board: BoardStore, error: String?, modifier: Modifier = 
     }
     LaunchedEffect(board.feedback) {
         board.feedback?.let { feedback ->
-            // Supersede prior success so a later operation cannot leave stale success feedback.
+            // Coalesce repeated reports and supersede stale success feedback.
             notices.removeAll {
-                it.feedback.kind == BoardMessageKind.Success ||
+                it.feedback.text == feedback.text || it.feedback.kind == BoardMessageKind.Success ||
                     (feedback.kind == BoardMessageKind.Migration && it.feedback.kind == BoardMessageKind.Migration)
             }
             if ((feedback.kind != BoardMessageKind.Import || board.canRetryImport) &&

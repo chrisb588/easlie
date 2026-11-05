@@ -143,7 +143,7 @@ class FullScreenRedesignTest {
         rule.runOnIdle { board.message = "First warning" }
         rule.mainClock.advanceTimeBy(1000)
         rule.runOnIdle { board.message = "Second error" }
-        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(350)
         rule.onNodeWithText("First warning").assertIsDisplayed()
         rule.onNodeWithText("Second error").assertIsDisplayed()
         rule.mainClock.advanceTimeBy(4500)
@@ -152,9 +152,10 @@ class FullScreenRedesignTest {
         rule.mainClock.advanceTimeBy(6000)
         rule.onNodeWithText("Second error").assertDoesNotExist()
         rule.runOnIdle { board.message = "Second error" }
-        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(350)
         rule.onNodeWithText("Second error").assertIsDisplayed()
         rule.onNodeWithContentDescription("Dismiss").performClick()
+        rule.mainClock.advanceTimeByFrame()
         rule.onNodeWithText("Second error").assertDoesNotExist()
     }
 
