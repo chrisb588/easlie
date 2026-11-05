@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
@@ -66,10 +67,9 @@ class BoardRenameFeedbackTest {
             assertArrayEquals(before, index.readBytes())
             assertEquals("Saved", BoardCollectionStorage(root, legacy).readCollection().boards.single().name)
 
-            rule.onNodeWithText("Open board").performClick()
-            rule.onNode(hasText("Saved") and hasAnyAncestor(isDialog())).assertIsDisplayed()
+            rule.openBoardLibrary()
+            rule.onNodeWithText("Saved").assertIsDisplayed()
             rule.onNodeWithText("Unsaved").assertDoesNotExist()
-            rule.onNodeWithText("Close").performClick()
         } finally {
             rule.runOnIdle { board.releaseImages() }
             root.deleteRecursively()
@@ -77,9 +77,10 @@ class BoardRenameFeedbackTest {
     }
 
     private fun renameTo(name: String) {
-        rule.onNodeWithText("Open board").performClick()
+        rule.openBoardLibrary()
+        rule.onNodeWithContentDescription("Board actions for", substring = true).performClick()
         rule.onNodeWithText("Rename", substring = false).performClick()
         rule.onNode(hasSetTextAction()).performTextReplacement(name)
-        rule.onNodeWithText("Save", substring = false).performClick()
+        rule.onNodeWithText("Rename", substring = false).performClick()
     }
 }

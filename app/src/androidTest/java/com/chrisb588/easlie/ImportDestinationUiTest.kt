@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
@@ -66,15 +67,15 @@ class ImportDestinationUiTest {
     }
 
     private fun openOther() {
-        rule.onNodeWithText("Open board").performClick()
+        rule.openBoardLibrary()
         rule.onNodeWithText("Other").performClick()
         rule.waitUntil(5000) { store.collectionReady && store.activeBoardId == other }
     }
 
     private fun deleteDestination() {
-        rule.onNodeWithText("Open board").performClick()
-        // Destination is first in recents; the confirmation names it before deletion.
-        rule.onAllNodesWithText("Delete")[0].performClick()
+        rule.openBoardLibrary()
+        rule.onNodeWithContentDescription("Board actions for Destination").performClick()
+        rule.onNodeWithText("Delete").performClick()
         rule.onNodeWithText("Delete Destination?").assertIsDisplayed()
         rule.onNodeWithText("Delete").performClick()
         rule.waitUntil(5000) { store.boards.none { it.id == destination } }
@@ -89,23 +90,24 @@ class ImportDestinationUiTest {
         val uris = if (shared) sharedImageUris(Intent(Intent.ACTION_SEND_MULTIPLE).setType("image/png")
             .putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(first, second))) else listOf(first, second)
         pauseImport(uris)
-        rule.onNodeWithText("Open board").performClick()
-        rule.onAllNodesWithText("Rename")[0].performClick()
+        rule.openBoardLibrary()
+        rule.onNodeWithContentDescription("Board actions for Destination").performClick()
+        rule.onNodeWithText("Rename").performClick()
         rule.onNode(hasSetTextAction()).performTextReplacement("Renamed destination")
-        rule.onNodeWithText("Save").performClick()
+        rule.onNodeWithText("Rename").performClick()
         rule.waitUntil(5000) { store.boards.first { it.id == destination }.name == "Renamed destination" }
         openOther()
         resolver.call(provider, "release-reads", null, null)
         rule.waitUntil(5000) { !store.importing && store.canRetryImport }
         val committed = snapshot(destination).items.single()
         assertTrue(snapshot(other).items.isEmpty())
-        rule.onNodeWithText("Retry failed images").performClick()
+        rule.onNodeWithContentDescription("Retry failed images").performClick()
         rule.waitUntil(5000) { !store.importing && !store.canRetryImport && snapshot(destination).items.size == 2 }
-        rule.onNodeWithText("Retry failed images").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Retry failed images").assertDoesNotExist()
         assertEquals(committed, snapshot(destination).items.first())
         assertTrue(snapshot(other).items.isEmpty())
         rule.runOnIdle { assertEquals(other, store.activeBoardId); assertTrue(store.items.isEmpty()) }
-        rule.onNodeWithText("Open board").performClick()
+        rule.openBoardLibrary()
         rule.onNodeWithText("Renamed destination").performClick()
         rule.waitUntil(5000) { store.collectionReady && store.activeBoardId == destination && store.items.size == 2 }
         rule.onNodeWithText("Renamed destination").assertIsDisplayed()
@@ -124,7 +126,7 @@ class ImportDestinationUiTest {
         resolver.call(provider, "fail-next-read", first.lastPathSegment, null)
         rule.runOnUiThread { store.enqueueImport(resolver, listOf(first)) }
         rule.waitUntil(5000) { !store.importing && store.canRetryImport }
-        rule.onNodeWithText("Retry failed images").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Retry failed images").assertIsDisplayed()
         deleteDestination()
         openOther()
         assertDeletedDestination()
@@ -135,7 +137,7 @@ class ImportDestinationUiTest {
 
     private fun assertDeletedDestination() {
         rule.onNodeWithText("cannot continue or be retried", substring = true).assertIsDisplayed()
-        rule.onNodeWithText("Retry failed images").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Retry failed images").assertDoesNotExist()
         rule.runOnIdle { assertEquals(other, store.activeBoardId); assertTrue(store.items.isEmpty()) }
         assertFalse(File(root, "boards/$destination").exists())
         assertTrue(snapshot(other).items.isEmpty())

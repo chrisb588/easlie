@@ -59,13 +59,24 @@ private data class Handle(val xSign: Float, val ySign: Float)
 private val corners = listOf(Handle(-1f, -1f), Handle(1f, -1f), Handle(1f, 1f), Handle(-1f, 1f))
 
 @Composable
-fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingMode: Boolean = false) {
+fun FullScreenCanvas(
+    board: BoardStore,
+    modifier: Modifier = Modifier,
+    floatingMode: Boolean = false,
+    deselectRequest: Int = 0,
+    showDeselectButton: Boolean = true,
+) {
     var selectedId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var menuId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
     var lastTapTime by remember(board.activeBoardId) { mutableStateOf(0L) }
     var lastTapId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var lastTapPosition by remember(board.activeBoardId) { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(deselectRequest) {
+        selectedId = null
+        menuId = null
+        lastTapId = null
+    }
     val density = LocalDensity.current.density
     val imageOwner = remember(board) { Any() }
     val interactive = board.isActiveCanvas(imageOwner)
@@ -280,7 +291,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                 }
             }
         }
-        if (selectedId != null) {
+        if (selectedId != null && showDeselectButton) {
             TextButton(
                 onClick = { selectedId = null; menuId = null },
                 modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).testTag(CanvasTestTags.Deselect),

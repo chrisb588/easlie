@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.chrisb588.easlie.canvas.CanvasSize
@@ -49,14 +50,14 @@ class PartialImportUiTest {
             val destination = rule.runOnIdle { store.activeBoardId!! }
             rule.onNodeWithText("partial-ui-temporary.png", substring = true).assertIsDisplayed()
             rule.onNodeWithText("partial-ui-invalid.png", substring = true).assertIsDisplayed()
-            rule.onNodeWithText("Retry failed images").assertIsDisplayed()
+            rule.onNodeWithContentDescription("Retry failed images").assertIsDisplayed()
             assertEquals(listOf(committed), BoardStorage(File(root, "boards/$destination")).load().snapshot.items)
 
             // Valid bytes here would create a third item if invalid inputs were retried.
             writeImage(invalid)
-            rule.onNodeWithText("Retry failed images").performClick()
+            rule.onNodeWithContentDescription("Retry failed images").performClick()
             rule.waitUntil(5000) { !store.importing && !store.canRetryImport && store.items.size == 2 }
-            rule.onNodeWithText("Retry failed images").assertDoesNotExist()
+            rule.onNodeWithContentDescription("Retry failed images").assertDoesNotExist()
             rule.runOnIdle { assertEquals(committed, store.items.first()) }
             assertEquals(2, BoardStorage(File(root, "boards/$destination")).load().snapshot.items.size)
             assertEquals(2, File(root, "boards/$destination/assets").listFiles()!!.size)
