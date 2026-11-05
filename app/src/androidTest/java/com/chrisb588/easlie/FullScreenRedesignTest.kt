@@ -93,8 +93,11 @@ class FullScreenRedesignTest {
         rule.onNodeWithContentDescription("Open board").performClick()
         rule.onNodeWithText("First").performClick()
         rule.waitUntil(5000) { board.collectionReady && board.activeBoardId == first }
+        rule.onNodeWithTag(CanvasTestTags.Deselect).assertDoesNotExist()
         rule.onNodeWithContentDescription("Actions").performClick()
-        rule.onNodeWithText("Deselect").performClick()
+        rule.onNodeWithText("Deselect").assertDoesNotExist()
+        rule.onNodeWithText("About").performClick()
+        rule.onNodeWithText("Close").performClick()
         rule.runOnIdle { assertEquals(before, board.viewport) }
         rule.onNodeWithContentDescription("Home").performClick()
         rule.openBoardActions("Second")
@@ -195,7 +198,7 @@ class FullScreenRedesignTest {
         rule.runOnIdle { failed.releaseImages() }
     }
 
-    @Test fun menuDeselectWorksWhenImageCoversTheCanvasAndPreviewDoesNotSwitchBoards() {
+    @Test fun bottomDeselectAppearsOnlyWithSelectionAndWorksWithNoticeAndFullCanvasImage() {
         create("Selection fixture")
         val resolver = rule.activity.contentResolver
         resolver.call(provider, "create-task-fixtures", null, null)
@@ -208,9 +211,16 @@ class FullScreenRedesignTest {
             board.update(board.items.single().copy(center = CanvasPoint(0f, 0f), width = board.windowSize.width * 3, height = board.windowSize.height * 3))
         }
         val original = rule.runOnIdle { board.items.single() }
+        rule.onNodeWithTag(CanvasTestTags.Deselect).assertDoesNotExist()
         rule.onNodeWithTag(CanvasTestTags.FullScreenBoard).performTouchInput { click(center) }
-        rule.onNodeWithContentDescription("Actions").performClick()
-        rule.onNodeWithText("Deselect").performClick()
+        rule.onNodeWithTag(CanvasTestTags.Deselect).assertIsDisplayed()
+        val canvasBounds = rule.onNodeWithTag(CanvasTestTags.FullScreenBoard).fetchSemanticsNode().boundsInRoot
+        val buttonBounds = rule.onNodeWithTag(CanvasTestTags.Deselect).fetchSemanticsNode().boundsInRoot
+        assertEquals(canvasBounds.center.x, buttonBounds.center.x, 1f)
+        assertTrue(buttonBounds.center.y > canvasBounds.center.y)
+        rule.runOnIdle { board.message = "Selection fixture warning" }
+        rule.onNodeWithTag(CanvasTestTags.Deselect).performClick()
+        rule.onNodeWithTag(CanvasTestTags.Deselect).assertDoesNotExist()
         rule.onNodeWithTag(CanvasTestTags.FullScreenBoard).performTouchInput { swipe(center, center + Offset(60f, 40f)) }
         rule.runOnIdle {
             assertEquals(original, board.items.single())

@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.foundation.layout.fillMaxSize
@@ -63,8 +64,6 @@ fun FullScreenCanvas(
     board: BoardStore,
     modifier: Modifier = Modifier,
     floatingMode: Boolean = false,
-    deselectRequest: Int = 0,
-    showDeselectButton: Boolean = true,
 ) {
     var selectedId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var menuId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
@@ -72,11 +71,6 @@ fun FullScreenCanvas(
     var lastTapTime by remember(board.activeBoardId) { mutableStateOf(0L) }
     var lastTapId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var lastTapPosition by remember(board.activeBoardId) { mutableStateOf(Offset.Zero) }
-    LaunchedEffect(deselectRequest) {
-        selectedId = null
-        menuId = null
-        lastTapId = null
-    }
     val density = LocalDensity.current.density
     val imageOwner = remember(board) { Any() }
     val interactive = board.isActiveCanvas(imageOwner)
@@ -291,11 +285,17 @@ fun FullScreenCanvas(
                 }
             }
         }
-        if (selectedId != null && showDeselectButton) {
-            TextButton(
-                onClick = { selectedId = null; menuId = null },
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).testTag(CanvasTestTags.Deselect),
-            ) { Text("Deselect image") }
+        if (interactive && board.items.any { it.id == selectedId }) {
+            val deselect = { selectedId = null; menuId = null; lastTapId = null }
+            if (floatingMode) {
+                TextButton(onClick = deselect,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).testTag(CanvasTestTags.Deselect),
+                ) { Text("Deselect image") }
+            } else {
+                FilledTonalButton(onClick = deselect,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp).testTag(CanvasTestTags.Deselect),
+                ) { Text("Deselect") }
+            }
         }
         Box(Modifier.offset { IntOffset(menuPosition.x.roundToInt(), menuPosition.y.roundToInt()) }.size(1.dp)) {
             DropdownMenu(expanded = menuId != null, onDismissRequest = { menuId = null }) {

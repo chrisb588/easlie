@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
@@ -33,12 +32,13 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
-import com.chrisb588.easlie.canvas.CanvasTestTags
 import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.AppearanceSettings
+import com.chrisb588.easlie.ui.theme.cardHeaderStyle
 import kotlinx.coroutines.delay
 
 private val cardCorners = RoundedCornerShape(16.dp)
@@ -64,7 +64,9 @@ internal fun FloatingBoardScreen(
     var about by rememberSaveable { mutableStateOf(false) }
     var appearance by rememberSaveable { mutableStateOf(false) }
     var permission by rememberSaveable { mutableStateOf(false) }
-    var deselectRequest by remember { mutableIntStateOf(0) }
+    val libraryTitleStyle = MaterialTheme.typography.titleLarge.let { it.copy(fontSize = (it.fontSize.value - 1).sp) }
+    val createIconSize = with(LocalDensity.current) { libraryTitleStyle.fontSize.toDp() }
+    val newBoardIconSize = with(LocalDensity.current) { MaterialTheme.typography.bodyLarge.fontSize.toDp() }
     val mainMenu = home || board.activeBoardId == null
     val active = board.boards.firstOrNull { it.id == board.activeBoardId }
     val create = { name = defaultBoardName(board.boards); creating = true; boardMenu = false }
@@ -82,9 +84,10 @@ internal fun FloatingBoardScreen(
     BackHandler(enabled = !mainMenu) { home = true; board.save() }
 
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        val actionsMenuWidth = minOf(264.dp, (maxWidth - 80.dp).coerceAtLeast(112.dp))
+        val controlsInset = if (mainMenu) 16.dp else 24.dp
+        val actionsMenuMaxWidth = (maxWidth - controlsInset * 2 - 64.dp).coerceAtLeast(112.dp)
         if (!mainMenu && board.canEdit) {
-            FullScreenCanvas(board, deselectRequest = deselectRequest, showDeselectButton = false)
+            FullScreenCanvas(board)
         }
         if (mainMenu) {
             LazyColumn(
@@ -101,9 +104,9 @@ internal fun FloatingBoardScreen(
                 }
                 item {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Your boards", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                        Text("Your boards", Modifier.weight(1f), style = libraryTitleStyle)
                         IconButton(onClick = create, enabled = board.collectionReady, modifier = Modifier.size(48.dp)) {
-                            Icon(UiIcon.Add.vector, "Create board", Modifier.size(24.dp))
+                            Icon(UiIcon.Add.vector, "Create board", Modifier.size(createIconSize))
                         }
                     }
                 }
@@ -118,7 +121,7 @@ internal fun FloatingBoardScreen(
         }
         if (!mainMenu) {
             Row(
-                Modifier.align(Alignment.TopStart).fillMaxWidth().padding(16.dp).padding(end = 60.dp),
+                Modifier.align(Alignment.TopStart).fillMaxWidth().padding(controlsInset).padding(end = 68.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -142,23 +145,21 @@ internal fun FloatingBoardScreen(
                         }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text("New board") },
-                            trailingIcon = { Icon(UiIcon.Add.vector, null, Modifier.size(24.dp)) },
+                            trailingIcon = { Icon(UiIcon.Add.vector, null, Modifier.size(newBoardIconSize)) },
                             enabled = board.collectionReady, onClick = create)
                     }
                 }
             }
         }
-        Column(Modifier.align(Alignment.TopEnd).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.align(Alignment.TopEnd).padding(controlsInset), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Box {
                 RoundControl(UiIcon.Menu, "Actions", onClick = { actions = true })
-                SideActionsMenu(actions, { actions = false }, width = actionsMenuWidth) {
+                SideActionsMenu(actions, { actions = false }, maxWidth = actionsMenuMaxWidth) {
                     if (!mainMenu) {
                         DropdownMenuItem(text = { Text("Switch to floating mode") }, enabled = board.canEdit, onClick = {
                             actions = false
                             if (overlayPermissionGranted) onStartFloatingBoard() else permission = true
                         })
-                        DropdownMenuItem(text = { Text("Deselect") }, modifier = Modifier.testTag(CanvasTestTags.Deselect),
-                            onClick = { deselectRequest++; actions = false })
                     }
                     DropdownMenuItem(text = { Text("Change theme") }, onClick = { actions = false; appearance = true })
                     DropdownMenuItem(text = { Text("About") }, onClick = { actions = false; about = true })
@@ -170,13 +171,14 @@ internal fun FloatingBoardScreen(
             Text("Opening board…", Modifier.align(Alignment.Center))
         }
         NoticeStack(board, errorMessage, Modifier.align(Alignment.BottomStart).padding(16.dp)
+            .padding(bottom = if (mainMenu) 0.dp else 72.dp)
             .widthIn(max = 560.dp).fillMaxWidth().heightIn(max = maxHeight * .45f))
     }
     if (creating || renaming != null) {
         val rename = renaming
         AlertDialog(shape = cardCorners,
             onDismissRequest = { creating = false; renaming = null },
-            title = { Text(if (rename != null) "Rename board" else "Create board") },
+            title = { Text(if (rename != null) "Rename board" else "Create board", style = cardHeaderStyle) },
             text = { OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Board name") }) },
             confirmButton = { TextButton(enabled = name.isNotBlank() && board.collectionReady, onClick = {
                 if (rename != null) board.renameBoard(rename.id, name) else board.createBoard(name)
@@ -185,13 +187,13 @@ internal fun FloatingBoardScreen(
             dismissButton = { TextButton(onClick = { creating = false; renaming = null }) { Text("Cancel") } })
     }
     deleting?.let { entry ->
-        AlertDialog(shape = cardCorners, onDismissRequest = { deleting = null }, title = { Text("Delete ${entry.name}?") },
+        AlertDialog(shape = cardCorners, onDismissRequest = { deleting = null }, title = { Text("Delete ${entry.name}?", style = cardHeaderStyle) },
             text = { Text("This board and its images will be removed from easlie.") },
             confirmButton = { TextButton(enabled = board.collectionReady, onClick = { board.deleteBoard(entry.id); deleting = null }) { Text("Delete") } },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } })
     }
     if (permission) {
-        AlertDialog(shape = cardCorners, onDismissRequest = { permission = false }, title = { Text("Allow floating mode") },
+        AlertDialog(shape = cardCorners, onDismissRequest = { permission = false }, title = { Text("Allow floating mode", style = cardHeaderStyle) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(androidx.compose.ui.res.stringResource(R.string.floating_board_permission_explanation))
                 Text(androidx.compose.ui.res.stringResource(R.string.floating_board_full_screen_note))
@@ -207,14 +209,14 @@ internal fun FloatingBoardScreen(
 
 /** Keep Actions beside its button rather than covering the Add images control below. */
 @Composable
-private fun SideActionsMenu(expanded: Boolean, onDismiss: () -> Unit, width: Dp,
+private fun SideActionsMenu(expanded: Boolean, onDismiss: () -> Unit, maxWidth: Dp,
     content: @Composable ColumnScope.() -> Unit) {
     if (!expanded) return
     val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
     Popup(popupPositionProvider = remember(gap) { SideMenuPositionProvider(gap) },
         onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
         Surface(shape = menuCorners, color = MaterialTheme.colorScheme.surfaceContainer,
-            shadowElevation = 8.dp, modifier = Modifier.width(width)) {
+            shadowElevation = 2.dp, modifier = Modifier.widthIn(max = maxWidth).width(IntrinsicSize.Max)) {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp), content = content)
         }
     }
@@ -238,7 +240,7 @@ private fun BoardLibraryRow(board: BoardStore, entry: StoredBoard, enabled: Bool
     }
     Surface(shape = menuCorners, color = MaterialTheme.colorScheme.surfaceContainer,
         enabled = enabled, onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+        Row(Modifier.padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Surface(shape = menuCorners, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(56.dp)) {
                 if (preview != null) Image(preview!!, "Preview of ${entry.name}")
@@ -260,7 +262,7 @@ private fun BoardLibraryRow(board: BoardStore, entry: StoredBoard, enabled: Bool
 
 @Composable
 private fun RoundControl(icon: UiIcon, label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    FilledTonalIconButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = Modifier.size(48.dp)) {
+    FilledTonalIconButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = Modifier.size(56.dp)) {
         Icon(icon.vector, label, Modifier.size(24.dp))
     }
 }

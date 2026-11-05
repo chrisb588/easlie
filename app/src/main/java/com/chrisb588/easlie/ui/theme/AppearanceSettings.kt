@@ -45,7 +45,7 @@ fun AppearanceSettings(
             Surface { choices() }
         } else {
             AlertDialog(shape = RoundedCornerShape(16.dp),
-                onDismissRequest = close, title = { Text("Appearance") },
+                onDismissRequest = close, title = { Text("Appearance", style = cardHeaderStyle) },
                 text = choices, confirmButton = {
                     TextButton(onClick = close) { Text("Close") }
                 })
