@@ -18,7 +18,6 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import java.io.File
 
 class BoardInteractionTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
@@ -28,15 +27,21 @@ class BoardInteractionTest {
 
     @Before
     fun importFixture() {
-        val context = InstrumentationRegistry.getInstrumentation().context
-        val file = File(context.filesDir, "interaction.png")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        fixture = Uri.parse("content://com.chrisb588.easlie.test.images/interaction.png")
         val bitmap = Bitmap.createBitmap(200, 100, Bitmap.Config.ARGB_8888)
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        bitmap.recycle()
-        fixture = Uri.parse("content://com.chrisb588.easlie.test.images/${file.name}")
+        try {
+            context.contentResolver.openOutputStream(fixture)!!.use {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } finally { bitmap.recycle() }
         rule.runOnIdle {
             board.items.toList().forEach { board.delete(it.id) }
+            board.message = null
             board.viewport = com.chrisb588.easlie.canvas.CanvasViewport()
+        }
+        rule.waitUntil(5000) { board.items.isEmpty() && board.viewport == com.chrisb588.easlie.canvas.CanvasViewport() }
+        rule.runOnIdle {
             board.enqueueImport(rule.activity.contentResolver, listOf(fixture))
         }
         rule.waitUntil(5000) { board.items.size == 1 && !board.importing }
@@ -53,8 +58,9 @@ class BoardInteractionTest {
         val start = screen(initial.center)
         node.performTouchInput { swipe(start, start + Offset(60f, 30f)) }
         rule.runOnIdle { assertEquals(initial, board.items.single()) }
-        node.performTouchInput { click(start) }
-        node.performTouchInput { swipe(start, start + Offset(60f, 30f)) }
+        val selectedStart = screen(initial.center)
+        node.performTouchInput { click(selectedStart) }
+        node.performTouchInput { swipe(selectedStart, selectedStart + Offset(60f, 30f)) }
         rule.runOnIdle {
             val moved = board.items.single()
             assertEquals(initial.center.x + 60f, moved.center.x, 2f)
@@ -73,10 +79,23 @@ class BoardInteractionTest {
             assertEquals(initial.width / initial.height, board.items.single().width / board.items.single().height, 0.001f)
         }
         val resized = board.items.single()
-        val gap = 36f * rule.activity.resources.displayMetrics.density / board.viewport.zoom
+        val gapPixels = 36f * rule.activity.resources.displayMetrics.density
+        // Keep the rotation control inside the canvas below the app's controls.
+        rule.runOnIdle {
+            val zoom = minOf(board.viewport.zoom, (board.windowSize.height - gapPixels - 4f) / resized.height)
+            assertTrue("Canvas must fit the rotation control", zoom > 0f)
+            val centerY = resized.height * zoom / 2f + gapPixels + 2f
+            board.viewport = board.viewport.copy(zoom = zoom, center = resized.center -
+                CanvasPoint(0f, centerY - board.windowSize.height / 2f) / zoom)
+        }
+        val gap = gapPixels / board.viewport.zoom
         val rotation = screen(resized.localToWorld(CanvasPoint(0f, -resized.height / 2f - gap)))
         val end = screen(resized.center + CanvasPoint(resized.height / 2f + gap, 0f))
-        node.performTouchInput { swipe(rotation, end) }
+        node.performTouchInput {
+            assertTrue(rotation.y in 0f..height.toFloat())
+            assertTrue(end.y in 0f..height.toFloat())
+            swipe(rotation, end)
+        }
         rule.runOnIdle { assertEquals(90f, board.items.single().rotationDegrees, 3f) }
     }
 
@@ -103,7 +122,9 @@ class BoardInteractionTest {
         }
         rule.waitUntil(5000) { !board.importing }
         rule.runOnIdle { assertEquals(before, board.items) }
-        rule.onNodeWithText("1 unsupported or unreadable image(s) were skipped.").assertExists()
+        rule.onNodeWithText("1 image(s) could not be imported or saved.", substring = true).assertExists()
+        rule.onNodeWithText("missing.png", substring = true).assertExists()
+        rule.runOnIdle { assertTrue(board.canRetryImport) }
     }
 
     @Test
