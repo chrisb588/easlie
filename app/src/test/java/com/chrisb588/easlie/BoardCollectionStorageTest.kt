@@ -147,6 +147,38 @@ class BoardCollectionStorageTest {
         assertEquals(opened, storage.readCollection())
     }
 
+    @Test fun defaultNamesIncrementPastHighestPlainBoardNumber() {
+        val cases = listOf(
+            emptyList<String>() to "Board 1",
+            listOf("Board 1") to "Board 2",
+            listOf("Board 1", "Board 3") to "Board 4",
+            listOf("Board 3", "Board 1") to "Board 4",
+            listOf("Board 1", "Board 99 (2)", "References") to "Board 2",
+            listOf("Board 1 (2)", "References", "board 10", "Board 03") to "Board 1",
+            listOf("Board 2147483647") to "Board 2147483648",
+        )
+        cases.forEach { (names, expected) ->
+            val boards = names.mapIndexed { index, name -> StoredBoard("board-$index", name) }
+            assertEquals(names.toString(), expected, defaultBoardName(boards))
+        }
+    }
+
+    @Test fun namesRejectBlanksAndUseFirstUnusedNumberedSuffix() = withDirectories { root, legacy ->
+        val storage = storageForManagement(root, legacy,
+            ids = ArrayDeque(listOf("first", "third", "second", "fourth")))
+        storage.writeCollection(BoardCollection(null, emptyList()))
+        val before = File(root, "boards.index").readBytes()
+        try { storage.createBoard("   "); fail("Expected blank-name rejection") }
+        catch (expected: IllegalArgumentException) { assertEquals("Board name is empty", expected.message) }
+        assertArrayEquals(before, File(root, "boards.index").readBytes())
+        storage.createBoard("Board 1")
+        storage.createBoard("Board 1 (3)")
+        assertEquals("Board 1 (2)", storage.createBoard("Board 1").boards.first().name)
+        assertEquals("Board 1 (4)", storage.createBoard("Board 1").boards.first().name)
+        assertEquals(listOf("Board 1 (4)", "Board 1 (2)", "Board 1 (3)", "Board 1"),
+            storage.readCollection().boards.map { it.name })
+    }
+
     @Test fun renameResolvesCollisionsPersistsNameAndPreservesIdentityActiveBoardAndOrder() = withDirectories { root, legacy ->
         val storage = storageForManagement(root, legacy, ids = ArrayDeque(listOf("one", "two", "three")))
         storage.writeCollection(BoardCollection(null, emptyList()))

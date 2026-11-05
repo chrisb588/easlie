@@ -1,12 +1,14 @@
 package com.chrisb588.easlie
 
 import android.net.Uri
+import com.chrisb588.easlie.canvas.CanvasSize
 import androidx.test.platform.app.InstrumentationRegistry
 import com.chrisb588.easlie.canvas.CanvasPoint
-import com.chrisb588.easlie.canvas.CanvasSize
 import com.chrisb588.easlie.canvas.CanvasViewport
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -33,7 +35,7 @@ class BoardCollectionStoreTest {
             main { store = BoardStore(legacy, collectionMigration = true) }
             await { store.collectionReady }
             main { assertNull(store.activeBoardId); store.createBoard("First") }
-            await { store.activeBoardId != null }
+            await { store.collectionReady && store.activeBoardId != null }
             lateinit var first: String
             main {
                 first = store.activeBoardId!!
@@ -41,7 +43,7 @@ class BoardCollectionStoreTest {
                 store.setViewport(CanvasViewport(CanvasPoint(21f, 22f), 3f), true)
                 store.createBoard("Second")
             }
-            await { store.activeBoardId != first }
+            await { store.collectionReady && store.activeBoardId != first }
             lateinit var second: String
             main {
                 second = store.activeBoardId!!
@@ -49,7 +51,7 @@ class BoardCollectionStoreTest {
                 assertEquals(CanvasViewport(), store.viewportFor(true))
                 store.openBoard(first)
             }
-            await { store.activeBoardId == first }
+            await { store.collectionReady && store.activeBoardId == first }
             main {
                 assertEquals(CanvasViewport(CanvasPoint(11f, 12f), 2f), store.viewport)
                 assertEquals(CanvasViewport(CanvasPoint(21f, 22f), 3f), store.viewportFor(true))
@@ -76,7 +78,7 @@ class BoardCollectionStoreTest {
             main { store = BoardStore(File(root, "board"), collectionMigration = true) }
             await { store.collectionReady }
             main { store.resizeWindow(CanvasSize(600f, 400f)); store.createBoard("First") }
-            await { store.activeBoardId != null }
+            await { store.collectionReady && store.activeBoardId != null }
             lateinit var first: String
             main { first = store.activeBoardId!! }
             resolver.call(provider, "hold-reads", null, null)
@@ -87,7 +89,7 @@ class BoardCollectionStoreTest {
                 Thread.sleep(20)
             }
             main { store.createBoard("Second") }
-            await { store.activeBoardId != first }
+            await { store.collectionReady && store.activeBoardId != first }
             lateinit var second: String
             main { second = store.activeBoardId!!; assertTrue(store.items.isEmpty()) }
             resolver.call(provider, "release-reads", null, null)
@@ -103,10 +105,97 @@ class BoardCollectionStoreTest {
             assertNotEquals(firstStorage.asset(firstItem.assetId), secondStorage.asset(secondItem.assetId))
             assertArrayEquals(firstStorage.asset(firstItem.assetId).readBytes(), secondStorage.asset(secondItem.assetId).readBytes())
             main { store.openBoard(first) }
-            await { store.activeBoardId == first && store.items.size == 1 }
-            main { assertEquals(firstItem, store.items.single()); store.releaseImages() }
+            await { store.collectionReady && store.activeBoardId == first && store.items.size == 1 }
+            val changed = firstItem.copy(rotationDegrees = 37f, zIndex = 30)
+            val full = CanvasViewport(CanvasPoint(14f, 15f), 2f)
+            val floating = CanvasViewport(CanvasPoint(24f, 25f), 3f)
+            main {
+                assertEquals(firstItem, store.items.single())
+                store.update(changed)
+                store.viewport = full
+                store.setViewport(floating, true)
+                store.openBoard(second)
+            }
+            await { store.collectionReady && store.activeBoardId == second }
+            main { assertEquals(secondItem, store.items.single()); store.releaseImages() }
+            lateinit var restarted: BoardStore
+            main { restarted = BoardStore(File(root, "board"), collectionMigration = true) }
+            await { restarted.collectionReady }
+            main {
+                assertEquals(second, restarted.activeBoardId)
+                assertEquals(listOf(second, first), restarted.boards.map { it.id })
+                assertEquals(secondItem, restarted.items.single())
+                assertEquals(CanvasViewport(), restarted.viewport)
+                assertEquals(CanvasViewport(), restarted.viewportFor(true))
+                restarted.openBoard(first)
+            }
+            await { restarted.collectionReady && restarted.activeBoardId == first }
+            main {
+                assertEquals(changed, restarted.items.single())
+                assertEquals(full, restarted.viewport)
+                assertEquals(floating, restarted.viewportFor(true))
+                restarted.releaseImages()
+            }
         } finally {
             resolver.call(provider, "release-reads", null, null)
+            resolver.delete(source, null, null)
+            root.deleteRecursively()
+        }
+    }
+
+    @Test fun startupCleanupCompletesBeforeQueuedSwitchAndImport() {
+        val context = instrumentation.targetContext
+        val resolver = context.contentResolver
+        val provider = Uri.parse("content://com.chrisb588.easlie.test.images")
+        val source = Uri.withAppendedPath(provider, "task-first.png")
+        resolver.call(provider, "create-task-fixtures", null, null)
+        val root = File(context.cacheDir, "cleanup-${UUID.randomUUID()}")
+        val legacy = File(root, "board")
+        val collection = BoardCollectionStorage(root, legacy)
+        val discovered = CountDownLatch(1)
+        val resumeCleanup = CountDownLatch(1)
+        var store: BoardStore? = null
+        try {
+            collection.initialize()
+            val first = collection.createBoard("First").activeBoardId!!
+            val firstStorage = BoardStorage(collection.directoryFor(first))
+            val owned = firstStorage.import(resolver, source)
+            owned.bitmap.recycle()
+            val item = com.chrisb588.easlie.canvas.BoardItem("kept", CanvasPoint(1f, 2f),
+                30f, 20f, zIndex = 10, assetId = owned.id)
+            firstStorage.save(BoardSnapshot(listOf(item)))
+            val second = collection.createBoard("Second").activeBoardId!!
+            collection.openBoard(first)
+            val orphan = firstStorage.asset("orphan").apply { writeText("unused") }
+            main {
+                store = BoardStore(legacy, collectionMigration = true, discoverReconciliation = { storage ->
+                    val candidates = storage.reconciliationCandidates()
+                    discovered.countDown()
+                    check(resumeCleanup.await(5, TimeUnit.SECONDS)) { "Cleanup was not released" }
+                    candidates
+                })
+                store!!.resizeWindow(CanvasSize(600f, 400f))
+            }
+            assertTrue(discovered.await(5, TimeUnit.SECONDS))
+            main {
+                // Neither switching nor copying may overlap startup asset cleanup.
+                assertFalse(store!!.collectionReady)
+                assertFalse(store!!.canEdit)
+                store!!.openBoard(second)
+                store!!.enqueueImport(resolver, listOf(source))
+                assertFalse(store!!.importing)
+            }
+            resumeCleanup.countDown()
+            await { store!!.collectionReady && store!!.activeBoardId == second && !store!!.importing }
+            await { firstStorage.load().snapshot.items.size == 2 }
+            assertTrue(firstStorage.asset(owned.id).isFile)
+            assertFalse(orphan.exists())
+            assertEquals(item, firstStorage.load().snapshot.items.first())
+            assertTrue(BoardStorage(collection.directoryFor(second)).load().snapshot.items.isEmpty())
+            main { assertTrue(store!!.items.isEmpty()) }
+        } finally {
+            resumeCleanup.countDown()
+            store?.let { main { it.releaseImages() } }
             resolver.delete(source, null, null)
             root.deleteRecursively()
         }
@@ -124,15 +213,15 @@ class BoardCollectionStoreTest {
             main { store = BoardStore(File(root, "board"), collectionMigration = true) }
             await { store.collectionReady }
             main { store.resizeWindow(CanvasSize(600f, 400f)); store.createBoard("Alpha") }
-            await { store.activeBoardId != null }
+            await { store.collectionReady && store.activeBoardId != null }
             lateinit var alphaId: String
             main {
                 alphaId = store.activeBoardId!!
                 store.createBoard("Beta")
             }
-            await { store.activeBoardId != alphaId }
+            await { store.collectionReady && store.activeBoardId != alphaId }
             main { store.openBoard(alphaId) }
-            await { store.activeBoardId == alphaId }
+            await { store.collectionReady && store.activeBoardId == alphaId }
             val full = CanvasViewport(CanvasPoint(11f, 12f), 2f)
             val floating = CanvasViewport(CanvasPoint(21f, 22f), 3f)
             main {
