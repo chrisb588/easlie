@@ -147,6 +147,22 @@ class BoardCollectionStorageTest {
         assertEquals(opened, storage.readCollection())
     }
 
+    @Test fun defaultNamesIncrementPastHighestPlainBoardNumber() {
+        val cases = listOf(
+            emptyList<String>() to "Board 1",
+            listOf("Board 1") to "Board 2",
+            listOf("Board 1", "Board 3") to "Board 4",
+            listOf("Board 3", "Board 1") to "Board 4",
+            listOf("Board 1", "Board 99 (2)", "References") to "Board 2",
+            listOf("Board 1 (2)", "References", "board 10", "Board 03") to "Board 1",
+            listOf("Board 2147483647") to "Board 2147483648",
+        )
+        cases.forEach { (names, expected) ->
+            val boards = names.mapIndexed { index, name -> StoredBoard("board-$index", name) }
+            assertEquals(names.toString(), expected, defaultBoardName(boards))
+        }
+    }
+
     @Test fun namesRejectBlanksAndUseFirstUnusedNumberedSuffix() = withDirectories { root, legacy ->
         val storage = storageForManagement(root, legacy,
             ids = ArrayDeque(listOf("first", "third", "second", "fourth")))

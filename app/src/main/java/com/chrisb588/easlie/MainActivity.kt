@@ -235,7 +235,7 @@ private fun FloatingBoardScreen(
         )
         board.boards.firstOrNull { it.id == board.activeBoardId }?.let { Text(it.name) }
         Row {
-            Button(enabled = board.collectionReady, onClick = { name = "Board 1"; creating = true }) { Text("Create board") }
+            Button(enabled = board.collectionReady, onClick = { name = defaultBoardName(board.boards); creating = true }) { Text("Create board") }
             TextButton(enabled = board.collectionReady && board.boards.isNotEmpty(), onClick = { opening = true }) { Text("Open board") }
         }
         Text(text = stringResource(R.string.floating_board_permission_explanation))

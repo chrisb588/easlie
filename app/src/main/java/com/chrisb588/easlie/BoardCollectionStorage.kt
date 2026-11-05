@@ -3,10 +3,19 @@ package com.chrisb588.easlie
 import android.system.Os
 import java.io.File
 import java.io.FileOutputStream
+import java.math.BigInteger
 import java.util.UUID
 
 internal data class StoredBoard(val id: String, val name: String)
 internal data class BoardCollection(val activeBoardId: String?, val boards: List<StoredBoard>)
+
+internal fun defaultBoardName(boards: List<StoredBoard>): String {
+    val pattern = Regex("Board ([1-9][0-9]*)")
+    val highest = boards.maxOfOrNull { board ->
+        pattern.matchEntire(board.name)?.groupValues?.get(1)?.toBigInteger() ?: BigInteger.ZERO
+    } ?: BigInteger.ZERO
+    return "Board ${highest + BigInteger.ONE}"
+}
 
 /** Owns the collection index and performs the v0.1 single-board migration. */
 internal class BoardCollectionStorage(
