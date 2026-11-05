@@ -1,11 +1,21 @@
 # Issue 31 canvas gesture checks
 
-Automated coverage: `CanvasGestureOwnershipTest` exercises the shared canvas with
-both full-screen and floating input tags. It covers overlapping unselected images,
-topmost tap selection, pan ownership, fresh pinch zoom, and release without image
-selection or transformation. It also checks selected resize and rotation handles
-over another image, with unchanged viewport and stationary-tap selection preserved.
-Instrumentation requires a device; compilation alone does not verify runtime behavior.
+Automated coverage: `CanvasGestureOwnershipTest` exercises the shared canvas in
+both modes: overlapping unselected images, topmost tap selection, pan ownership,
+fresh pinch zoom, release behavior, selected-image controls, and resize/rotation
+handles over another image. `CanvasViewportOwnershipTest` adds both-image and
+mixed image/empty pinch starts in either pointer order, off-center focal preservation,
+twist input without rotation, the remaining-finger fallback, and continuous pan
+ownership. `CanvasHostInputTest` injects Android touch events through the real
+Activity and floating-service windows. It checks canvas pan, off-center pinch,
+release ownership, stable host bounds during canvas input, and floating-window
+movement without canvas or image changes.
+
+Device verification on the SM-X616B: all nine tests passed. The host-input test
+creates a temporary board, removes only that board, restores the original active
+board, and asserts that the original board list, image transforms, and both saved
+viewports are unchanged. Overlay permission is required. Compilation alone does
+not verify runtime behavior.
 
 Lead smoke checks, numbered to match the issue's ACs. Repeat AC1–AC5 in
 full-screen and floating mode:
@@ -25,17 +35,18 @@ full-screen and floating mode:
    unselected image, including an image above it and one below it. Only the
    selected image changes; the viewport stays unchanged. A stationary tap on a
    handle over another image must still select the topmost image at that point.
-5. **AC5 — Canvas ownership:** Deselect, then start a canvas drag and cross a
-   separately positioned image. No image is selected or transformed during the
-   drag or on release. Repeat supported canvas gestures over unselected images;
-   the canvas must not rotate.
+5. **AC5 — Canvas ownership:** Deselect, then start a canvas drag on an unselected
+   image. Continue dragging, change direction, and release. It must remain a canvas
+   gesture throughout; no image is selected or transformed during the gesture or
+   on release. Repeat with a fresh pinch over images, then start another drag to
+   confirm that release did not select an image. Supported canvas gestures work
+   over unselected images without introducing canvas rotation. A pan moves images
+   with your finger, so this check does not require crossing a different image.
 6. **AC6 — Automated coverage and host instructions (contributor check):** Run
-   `CanvasGestureOwnershipTest` on the device. Its full-screen and floating-mode
-   cases exercise the shared composable, not input through the actual floating
-   service. Mixed image/empty pinch starts, off-center pinch focus, crossing a
-   separate image, and actual floating-window input still lack automated coverage.
-   Keep this AC unchecked until that coverage is supplied. AC1–AC5 above provide
-   the lead's checks for both hosts.
+   `CanvasGestureOwnershipTest`, `CanvasViewportOwnershipTest`, and
+   `CanvasHostInputTest` on the device. All nine tests must pass, including the
+   real-host input and original-board restoration assertions. AC1–AC5 above
+   provide the lead's checks for both hosts.
 
 Additional ownership checks, outside the AC numbering:
 
