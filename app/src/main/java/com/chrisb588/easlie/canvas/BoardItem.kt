@@ -40,6 +40,12 @@ data class BoardItem(
         )
     }
 
+    /** Scale from the transition geometry without moving its center or changing its angle. */
+    fun resizedAroundCenter(distanceScale: Float): BoardItem {
+        val scale = distanceScale.coerceAtLeast(16f / min(width, height))
+        return copy(width = width * scale, height = height * scale)
+    }
+
     fun rotatedFrom(start: CanvasPoint, end: CanvasPoint): BoardItem {
         val first = start - center
         val last = end - center
