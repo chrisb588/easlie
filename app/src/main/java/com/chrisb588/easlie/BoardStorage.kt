@@ -64,6 +64,20 @@ internal class BoardStorage(private val directory: File) {
         }
     }
 
+    /** Commit a validated temporary copy after the store checks board ownership. */
+    fun adoptSource(id: String, source: File): File {
+        val destination = asset(id)
+        check(assets.isDirectory || assets.mkdirs()) { "Could not create asset storage" }
+        val temporary = File(assets, "$id.tmp")
+        try {
+            source.inputStream().use { input ->
+                FileOutputStream(temporary).use { output -> input.copyTo(output); output.fd.sync() }
+            }
+            Os.rename(temporary.path, destination.path)
+            return destination
+        } finally { temporary.delete() }
+    }
+
     fun save(snapshot: BoardSnapshot) {
         directory.mkdirs()
         val json = JSONObject().put("schemaVersion", 1)
