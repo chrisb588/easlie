@@ -58,9 +58,9 @@ class ImportRoutingTest {
                         store = BoardStore(File(root, "board"), collectionMigration = true)
                         store.enqueueImport(resolver, sharedImageUris(intent))
                     }
-                    await { store.activeBoardId == saved }
+                    await { store.collectionReady && store.activeBoardId == saved }
                     main { store.openBoard(other) }
-                    await { store.activeBoardId == other }
+                    await { store.collectionReady && store.activeBoardId == other }
                     main { store.resizeWindow(CanvasSize(600f, 400f)) }
                     await { !store.importing && snapshot(root, saved).items.size == if (multiple) 2 else 1 }
                     main { assertTrue(store.items.isEmpty()); assertEquals(other, store.activeBoardId) }
@@ -82,10 +82,10 @@ class ImportRoutingTest {
             }
             await { store.awaitingImportDestination }
             main { assertFalse(store.importing); assertTrue(store.items.isEmpty()); store.createBoard("Chosen") }
-            await { store.activeBoardId != null }
+            await { store.collectionReady && store.activeBoardId != null }
             lateinit var chosen: String
             main { chosen = store.activeBoardId!!; assertFalse(store.awaitingImportDestination); store.createBoard("Later") }
-            await { store.activeBoardId != chosen }
+            await { store.collectionReady && store.activeBoardId != chosen }
             main { store.resizeWindow(CanvasSize(600f, 400f)) }
             await { !store.importing && snapshot(root, chosen).items.size == 1 }
             main { assertTrue(store.items.isEmpty()) }
@@ -107,7 +107,7 @@ class ImportRoutingTest {
             main { store = BoardStore(File(root, "board"), collectionMigration = true) }
             await { store.collectionReady }
             main { store.resizeWindow(CanvasSize(600f, 400f)); store.createBoard("Destination") }
-            await { store.activeBoardId != null }
+            await { store.collectionReady && store.activeBoardId != null }
             lateinit var destination: String
             main { destination = store.activeBoardId!!; store.enqueueImport(resolver, listOf(good, temporary, invalid, unsupported)) }
             await { !store.importing && store.canRetryImport }
@@ -119,7 +119,7 @@ class ImportRoutingTest {
                 store.renameBoard(destination, "Renamed")
                 store.createBoard("Other")
             }
-            await { store.activeBoardId != destination && store.boards.any { it.id == destination && it.name == "Renamed" } }
+            await { store.collectionReady && store.activeBoardId != destination && store.boards.any { it.id == destination && it.name == "Renamed" } }
             writeImage(temporary)
             // If invalid sources were retried these now-valid bytes would create extra items.
             writeImage(invalid)
@@ -147,7 +147,7 @@ class ImportRoutingTest {
             main { store = BoardStore(File(root, "board"), collectionMigration = true) }
             await { store.collectionReady }
             main { store.resizeWindow(CanvasSize(600f, 400f)); store.createBoard("Destination") }
-            await { store.activeBoardId != null }
+            await { store.collectionReady && store.activeBoardId != null }
             lateinit var destination: String
             main { destination = store.activeBoardId!! }
             resolver.call(provider, "hold-reads", null, null)
@@ -188,15 +188,15 @@ class ImportRoutingTest {
             main { store = BoardStore(File(root, "board"), collectionMigration = true) }
             await { store.collectionReady }
             main { store.resizeWindow(CanvasSize(600f, 400f)); store.createBoard("Delete") }
-            await { store.activeBoardId != null }
+            await { store.collectionReady && store.activeBoardId != null }
             lateinit var destination: String
             main { destination = store.activeBoardId!!; store.enqueueImport(resolver, listOf(temporary)) }
             await { !store.importing && store.canRetryImport }
             main { store.deleteBoard(destination) }
-            await { store.activeBoardId == null }
+            await { store.collectionReady && store.activeBoardId == null }
             writeImage(temporary)
             main { store.createBoard("Survivor") }
-            await { store.activeBoardId != null }
+            await { store.collectionReady && store.activeBoardId != null }
             main { assertFalse(store.canRetryImport); store.retryImport() }
             await { !store.importing && !store.canRetryImport && store.message?.contains("cannot continue or be retried") == true }
             assertFalse(File(root, "boards/$destination").exists())

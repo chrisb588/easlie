@@ -53,3 +53,31 @@ switching and renaming, and destination deletion.
 through the provider instead of the test APK's private directory. All three of
 its tests executed successfully. Lead smoke tests for remaining user flows are
 still pending; the PR has not been merged.
+
+## AC2 and AC5 UI smoke tests — 2026-11-05
+
+All 16 device tests passed in `ImportDestinationUiTest`,
+`BoardCollectionStoreTest`, `ImportRoutingTest`, and `BoardDeletionDialogTest`.
+Lint and the Android test APK build passed.
+
+The four new `ImportDestinationUiTest` smoke tests pause source reads while
+operating the visible controls. Picker-result and parsed shared-payload cases
+rename the destination, open another board, resume the import, and press Retry.
+Both assert that successful and retried images remain in the original board,
+the original successful item is preserved, and the other board stays empty.
+They reopen the renamed destination to confirm its persisted contents.
+
+Deletion is exercised both during copying and before retry. Both cases assert
+the visible explanation, absence of the retry control, absence of the deleted
+board directory, and no images redirected to the surviving board. A direct retry
+call after deletion also cannot start another import. Test boards use isolated
+cache directories; the lead's two prepared boards are untouched.
+
+The picker-result and shared-payload tests enter at the import queue. Android's
+system picker is not driven; external stopped-app share delivery is covered by
+the separate host script above. AC2 and AC5 are verified from these UI and
+storage assertions.
+
+An initial broader run exposed a test race in destination choice: active identity
+was observed before restore completed. `ImportRoutingTest` now also waits for
+`collectionReady` before acting on the active board. The corrected run passed.
