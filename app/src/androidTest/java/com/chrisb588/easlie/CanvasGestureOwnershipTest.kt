@@ -24,6 +24,86 @@ class CanvasGestureOwnershipTest {
     @Test fun fullScreenInputOwnsUnselectedDragsAndPinches() = verifyHost(false)
     @Test fun floatingInputOwnsUnselectedDragsAndPinches() = verifyHost(true)
 
+    @Test fun fullScreenResizeHandleOverAnotherImageKeepsOwnership() = verifyOverlappingHandle(false, false)
+    @Test fun floatingResizeHandleOverAnotherImageKeepsOwnership() = verifyOverlappingHandle(true, false)
+    @Test fun fullScreenRotationHandleOverAnotherImageKeepsOwnership() = verifyOverlappingHandle(false, true)
+    @Test fun floatingRotationHandleOverAnotherImageKeepsOwnership() = verifyOverlappingHandle(true, true)
+
+    private fun verifyOverlappingHandle(floating: Boolean, rotating: Boolean) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val fixture = Uri.parse("content://com.chrisb588.easlie.test.images/clipping.png")
+        instrumentation.targetContext.contentResolver.call(fixture, "create-clipping-fixture", null, null)
+        val board = BoardStore()
+        rule.setContent { FullScreenCanvas(board, Modifier.size(300.dp), floatingMode = floating) }
+        rule.runOnIdle {
+            board.enqueueImport(instrumentation.targetContext.contentResolver, listOf(fixture, fixture))
+        }
+        rule.waitUntil(5000) { board.items.size == 2 && !board.importing }
+        val initialViewport = board.viewportFor(floating)
+        // Cover controls both with a higher image and with an image below selection.
+        val selectedId = if (rotating) board.items.last().id else board.items.first().id
+        val otherId = board.items.first { it.id != selectedId }.id
+        rule.runOnIdle {
+            board.items.toList().forEach { item ->
+                board.update(item.copy(
+                    center = initialViewport.center + if (item.id == selectedId) CanvasPoint(0f, 0f) else CanvasPoint(200f, 0f),
+                    width = 160f, height = 160f,
+                ))
+            }
+        }
+        val node = rule.onNodeWithTag(if (floating) CanvasTestTags.FloatingBoard else CanvasTestTags.FullScreenBoard)
+        node.performTouchInput { down(center); up() }
+        val selected = board.items.first { it.id == selectedId }
+        val density = instrumentation.targetContext.resources.displayMetrics.density
+        val handleWorld = if (rotating) {
+            selected.localToWorld(CanvasPoint(0f, -selected.height / 2f - 36f * density / initialViewport.zoom))
+        } else selected.corner(1f, 1f)
+        rule.runOnIdle {
+            val other = board.items.first { it.id == otherId }
+            board.update(other.copy(center = handleWorld, width = 100f, height = 100f))
+        }
+        val other = board.items.first { it.id == otherId }
+        node.performTouchInput {
+            val point = initialViewport.worldToWindow(handleWorld, CanvasSize(width.toFloat(), height.toFloat()))
+            val handle = Offset(point.x, point.y)
+            down(handle)
+            moveTo(handle + if (rotating) Offset(60f, 0f) else Offset(45f, 45f))
+            up()
+        }
+        rule.runOnIdle {
+            assertEquals("Handle drag must not pan", initialViewport, board.viewportFor(floating))
+            assertEquals(other, board.items.first { it.id == otherId })
+            val changed = board.items.first { it.id == selectedId }
+            if (rotating) {
+                assertNotEquals(selected.rotationDegrees, changed.rotationDegrees)
+                assertEquals(selected.center, changed.center)
+                assertEquals(selected.width, changed.width, 0.001f)
+            } else {
+                assertNotEquals(selected.width, changed.width)
+                assertEquals(selected.width / selected.height, changed.width / changed.height, 0.001f)
+                assertEquals(selected.corner(-1f, -1f), changed.corner(-1f, -1f))
+            }
+            board.update(selected)
+        }
+        // A tap on the same control still selects the topmost image underneath it.
+        node.performTouchInput {
+            val point = initialViewport.worldToWindow(handleWorld, CanvasSize(width.toFloat(), height.toFloat()))
+            val handle = Offset(point.x, point.y)
+            down(handle); up()
+        }
+        node.performTouchInput {
+            val point = initialViewport.worldToWindow(handleWorld, CanvasSize(width.toFloat(), height.toFloat()))
+            val start = Offset(point.x, point.y)
+            down(start); moveTo(start + Offset(60f, 20f)); up()
+        }
+        rule.runOnIdle {
+            assertEquals(initialViewport, board.viewportFor(floating))
+            assertEquals(selected, board.items.first { it.id == selectedId })
+            assertNotEquals(other.center, board.items.first { it.id == otherId }.center)
+            assertEquals(other.width, board.items.first { it.id == otherId }.width, 0.001f)
+        }
+    }
+
     private fun verifyHost(floating: Boolean) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val fixture = Uri.parse("content://com.chrisb588.easlie.test.images/clipping.png")

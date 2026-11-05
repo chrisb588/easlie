@@ -102,12 +102,11 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                             val worldStart = viewportAtStart.windowToWorld(start, size)
                             val selected = board.items.firstOrNull { it.id == selectedId }
                             val hit = board.items.hitTest(worldStart)
-                            val handlesBelongToHit = hit == null || hit.id == selectedId
                             val centerDistance = selected?.let {
                                 (viewportAtStart.worldToWindow(it.center, size).toOffset() - down.position).getDistance()
                             } ?: 0f
                             // Preserve a move target near the center even when a zoomed-out image is tiny.
-                            val handle = selected?.takeIf { handlesBelongToHit }?.let { item ->
+                            val handle = selected?.let { item ->
                                 val nearest = corners.minByOrNull {
                                     val point = viewportAtStart.worldToWindow(item.corner(it.xSign, it.ySign), size)
                                     (point.toOffset() - down.position).getDistance()
@@ -118,7 +117,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                     distance <= handleRadius * 2f && distance < centerDistance
                                 }
                             }
-                            val rotationHit = selected?.takeIf { handlesBelongToHit }?.let {
+                            val rotationHit = selected?.let {
                                 val point = viewportAtStart.worldToWindow(rotationHandle(it, rotationGap / viewportAtStart.zoom), size)
                                 val distance = (point.toOffset() - down.position).getDistance()
                                 distance <= handleRadius * 2f && distance < centerDistance
