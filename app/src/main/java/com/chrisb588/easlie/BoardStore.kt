@@ -108,7 +108,7 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     val collection = collectionStorage.readCollection()
                     boards = collection.boards
                     if (collection.activeBoardId != null && directory == null) {
-                        val unavailable = "The previous board is unavailable. Open or create a board."
+                        val unavailable = "The previously active board cannot be accessed. Please create a new board or open an existing one."
                         message = listOfNotNull(cleanupError, unavailable).joinToString(" ")
                     }
                     activeBoardId = collection.activeBoardId?.takeIf { id -> directory != null && collection.boards.any { it.id == id } }

@@ -340,7 +340,7 @@ class BoardCollectionStoreTest {
             main {
                 assertNull(store.activeBoardId)
                 assertFalse(store.canEdit)
-                assertTrue(store.message!!.contains("previous board is unavailable"))
+                assertEquals("The previously active board cannot be accessed. Please create a new board or open an existing one.", store.message)
                 assertEquals(listOf("survivor"), store.boards.map { it.id })
             }
             assertFalse(storage.directoryFor("missing").exists())
