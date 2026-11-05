@@ -1,7 +1,9 @@
 # Issue 32 gesture transitions
 
-A second pointer newly placed on a selected image's current resize corner during
-an established image move starts proportional resizing. The transition captures
+A second pointer newly placed on a selected image's current resize corner while
+the first finger touches its body starts proportional resizing. No preceding
+drag or minimum first-finger movement is required. A second finger elsewhere
+cannot claim the canvas or start resizing. The transition captures
 its displayed geometry and the pointers' distance. Subsequent distance changes
 scale that geometry around its captured center. Translation of the midpoint does
 not translate or rotate the image. When either resizing pointer lifts, the
@@ -27,11 +29,15 @@ image on the first tap does not prevent the second tap from opening Delete.
 
 Validation on 2026-11-05: 49 debug unit tests, lint, and diff checks passed. The
 updated app was installed and launched on the connected Samsung SM-X616B before
-AC verification. All 18 targeted Android tests passed: CanvasGestureOwnershipTest
-(6), CanvasResizeContinuationTest (4), CanvasInterruptionTest (6), and
+AC verification. All 22 targeted Android tests passed: CanvasGestureOwnershipTest
+(6), CanvasResizeContinuationTest (8), CanvasInterruptionTest (6), and
 CanvasViewportOwnershipTest (2).
 
-Coverage includes both canvas modes, each resize finger lifting first, repeated
+Coverage includes both canvas modes, a stationary first finger followed by a
+second finger on a corner, and a second finger away from all corners leaving
+both the image and viewport unchanged. The stationary-corner regression tests
+failed in both modes before the fix and passed afterward. Tests also cover each
+resize finger lifting first, repeated
 resize-to-drag transitions, unchanged geometry on pointer lift, and double taps
 with recomposition between taps. Cancellation tests wait for the displayed move,
 rotation, or resize before cancellation, then compare that exact transform with
@@ -42,5 +48,5 @@ drag and subsequent save. These use temporary boards.
 AC5 is verified for injected touch cancellation and canvas removal in both modes.
 Activity recreation, service restart, and abrupt process death were not tested.
 If additional fingers cause the resizing pair to lose ownership, the remaining
-touches stay inactive until all fingers lift. The lead's AC4 user-flow check
-remains pending.
+touches stay inactive until all fingers lift. The lead's updated AC1 and AC4
+user-flow checks remain pending.

@@ -26,6 +26,10 @@ class CanvasResizeContinuationTest {
     @Test fun floatingRemainingFingerResumesImageDragging() = verifyContinuation(true)
     @Test fun fullScreenDoubleTapSurvivesSelectionRecomposition() = verifyDoubleTap(false)
     @Test fun floatingDoubleTapSurvivesSelectionRecomposition() = verifyDoubleTap(true)
+    @Test fun fullScreenStationaryImageTouchCanStartResizing() = verifyStationaryResize(false)
+    @Test fun floatingStationaryImageTouchCanStartResizing() = verifyStationaryResize(true)
+    @Test fun fullScreenSecondFingerAwayFromCornersDoesNotResizeOrZoom() = verifyStationaryResize(false, onCorner = false)
+    @Test fun floatingSecondFingerAwayFromCornersDoesNotResizeOrZoom() = verifyStationaryResize(true, onCorner = false)
 
     private fun importFixture(board: BoardStore) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -92,6 +96,48 @@ class CanvasResizeContinuationTest {
             rule.onNodeWithTag(CanvasTestTags.Deselect).assertExists()
             node.performTouchInput { advanceEventTime(100); down(center); up() }
             rule.onNodeWithText("Delete").assertExists()
+        } finally {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { board.releaseImages() }
+        }
+    }
+
+    private fun verifyStationaryResize(floating: Boolean, onCorner: Boolean = true) {
+        val board = BoardStore()
+        try {
+            rule.setContent { FullScreenCanvas(board, Modifier.size(500.dp), floatingMode = floating) }
+            importFixture(board)
+            val viewport = board.viewportFor(floating)
+            rule.runOnIdle {
+                board.update(board.items.single().copy(center = viewport.center, width = 200f, height = 150f, rotationDegrees = 23f))
+            }
+            val node = rule.onNodeWithTag(if (floating) CanvasTestTags.FloatingBoard else CanvasTestTags.FullScreenBoard)
+            node.performTouchInput { down(center); up() }
+            val selected = board.items.single()
+            node.performTouchInput {
+                down(0, center)
+                val world = if (onCorner) selected.corner(1f, 1f) else selected.localToWorld(CanvasPoint(40f, 0f))
+                val point = viewport.worldToWindow(world, CanvasSize(width.toFloat(), height.toFloat()))
+                down(1, Offset(point.x, point.y))
+            }
+            rule.runOnIdle {
+                assertEquals("Adding the second finger must not jump", selected, board.items.single())
+                assertEquals(viewport, board.viewportFor(floating))
+            }
+            node.performTouchInput { moveBy(if (onCorner) 0 else 1, Offset(-40f, -20f)) }
+            val resized = board.items.single()
+            rule.runOnIdle {
+                if (onCorner) assertNotEquals(selected.width, resized.width)
+                else assertEquals("Only a resize corner may start resizing", selected, resized)
+                assertEquals(selected.center, resized.center)
+                assertEquals(selected.rotationDegrees, resized.rotationDegrees)
+                assertEquals(selected.width / selected.height, resized.width / resized.height, 0.001f)
+                assertEquals(viewport, board.viewportFor(floating))
+            }
+            node.performTouchInput { up(1); moveBy(0, Offset(50f, 15f)); up(0) }
+            rule.runOnIdle {
+                assertEquals(resized.copy(center = resized.center + CanvasPoint(50f, 15f) / viewport.zoom), board.items.single())
+                assertEquals(viewport, board.viewportFor(floating))
+            }
         } finally {
             InstrumentationRegistry.getInstrumentation().runOnMainSync { board.releaseImages() }
         }

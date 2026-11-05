@@ -149,7 +149,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                             do {
                                 val event = awaitPointerEvent()
                                 val pressed = event.changes.count { it.pressed }
-                                if (pressed >= 2 && (viewportGesture || !dragged || kind == DragKind.Pan) && twoFingerItem == null) {
+                                if (pressed >= 2 && (viewportGesture || kind == DragKind.Pan) && twoFingerItem == null) {
                                     viewportGesture = true
                                     dragged = true
                                     lastTapId = null
@@ -162,7 +162,9 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                     }
                                     event.changes.forEach { if (it.pressed) it.consume() }
                                 } else if (pressed >= 2) {
-                                    // Transition only when a new second finger lands on a current resize corner.
+                                    dragged = true
+                                    lastTapId = null
+                                    // A selected-image touch owns input even before crossing the drag threshold.
                                     if (pressed == 2 && kind == DragKind.Move && twoFingerItem == null && !imagePointersEnded) {
                                         val first = event.changes.firstOrNull { it.id == movePointer && it.pressed }
                                         val second = event.changes.firstOrNull { it.id != movePointer && it.pressed && !it.previousPressed }

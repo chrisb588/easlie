@@ -111,16 +111,19 @@ Dragging an already selected image moves that image. Its resize and rotation
 controls continue to manipulate the selected image. These operations must not
 accidentally pan the canvas.
 
-A fresh two-finger canvas gesture manipulates the viewport, including when either
-or both fingers begin on images. Pinch zoom keeps its focal-point behavior. All
-other supported canvas gestures must also work over unselected images. This
+A fresh two-finger canvas gesture that starts on empty space or an unselected
+image manipulates the viewport, including when both fingers begin on unselected
+images. Pinch zoom keeps its focal-point behavior. All other supported canvas
+gestures must also work over unselected images. This
 requirement does not introduce a new canvas gesture such as canvas rotation.
 
 Adding a second finger to an ongoing image manipulation must not change that
-gesture into canvas manipulation. If the second finger touches a resize corner
-of the selected image during an image drag, permit a transition to two-finger
-image resizing. Both fingers contribute to resizing; neither is ignored. Resize
-according to the change in distance between the fingers, preserving the image's
+gesture into canvas manipulation. A first finger on the selected image reserves
+image manipulation even before it starts dragging. If the second finger touches
+a resize corner of that image, permit a transition to two-finger image resizing
+without requiring a preceding drag. Both fingers contribute to resizing; neither
+is ignored. Resize according to the change in distance between the fingers,
+preserving the image's
 aspect ratio and keeping its center fixed at the transition. Moving the fingers'
 midpoint must not translate the image, and this gesture must not rotate it or
 manipulate the canvas. Existing one-finger corner resizing keeps its opposite
@@ -303,10 +306,11 @@ identify the affected board without changing unaffected boards.
    pans the canvas. A tap still selects the topmost image. Selected-image movement,
    resizing, and rotation continue to work. Explicit deselection works when the
    selected image fills the visible canvas.
-3. Fresh canvas pinch gestures work over images without accidentally selecting or
+3. Fresh canvas pinch gestures work over unselected images without accidentally selecting or
    transforming them. A second finger during image manipulation does not start
-   canvas manipulation. A second finger on a resize corner during an image drag
-   permits resizing with both fingers, preserving aspect ratio and a fixed center.
+   canvas manipulation. With a first finger touching the selected image, a second
+   finger on its resize corner permits resizing without a preceding drag,
+   preserving aspect ratio and a fixed center.
    One-finger corner resizing still preserves the opposite corner. Verify that
    interruption retains the last displayed transform and ends the gesture.
 4. Attempt one-finger canvas panning after lifting one finger from a canvas pinch.
