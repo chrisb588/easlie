@@ -23,7 +23,7 @@ class FloatingBoardActionActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!FloatingBoardService.isBoardAttached) { finish(); return }
-        startService(FloatingBoardService.startIntent(this).setAction(FloatingBoardService.ACTION_DIM))
+        startService(FloatingBoardService.startIntent(this).setAction(FloatingBoardService.ACTION_HIDE))
         when (intent.action) {
             ADD_IMAGES -> if (savedInstanceState == null) {
                 try {
