@@ -11,12 +11,16 @@ import android.os.Build
 import android.provider.Settings
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.view.inspector.WindowInspector
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.filters.SdkSuppress
 import com.chrisb588.easlie.canvas.CanvasPoint
 import com.chrisb588.easlie.canvas.CanvasViewport
 import java.util.UUID
@@ -24,6 +28,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /** Real overlay/action windows, using a disposable empty board and restoring the original active board. */
+@SdkSuppress(minSdkVersion = 29)
 class FloatingBoardLifecycleTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
@@ -69,6 +74,28 @@ class FloatingBoardLifecycleTest {
         }
     }
     private fun bounds(label: String): Rect = Rect().also { node(label)!!.getBoundsInScreen(it) }
+    private fun assertOverlayDimmed(dimmed: Boolean) = main {
+        val view = WindowInspector.getGlobalWindowViews().single {
+            it.contentDescription?.toString() == "Floating reference board"
+        }
+        val params = view.layoutParams as WindowManager.LayoutParams
+        assertTrue("Overlay must stay visible", view.isShown)
+        assertEquals(if (dimmed) 0.5f else 1f, params.alpha)
+        assertEquals(dimmed, params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
+        assertEquals(if (dimmed) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO, view.importantForAccessibility)
+    }
+    private fun assertOverlaySurfaceVisible() {
+        await("Android hid the floating overlay surface") {
+            val dump = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                automation.executeShellCommand("dumpsys window windows")
+            ).bufferedReader().use { it.readText() }
+            dump.split(Regex("(?m)^  Window #")).any {
+                it.contains(context.packageName) && it.contains("ty=APPLICATION_OVERLAY") &&
+                    it.contains("mHasSurface=true") && it.contains("isOnScreen=true") && it.contains("isVisible=true")
+            }
+        }
+    }
     private fun captureEmptyFixture(board: BoardStore, fixtureId: String?, filename: String) {
         main { assertTrue(board.items.isEmpty()); assertEquals(fixtureId, board.activeBoardId) }
         val overlay = bounds("Floating reference board")
@@ -189,11 +216,17 @@ class FloatingBoardLifecycleTest {
                 click("New board")
                 await("Creation form did not open") { node("Cancel") != null }
                 assertNull(node("Close floating board"))
-                click("Cancel")
+                assertOverlayDimmed(true)
+                assertOverlaySurfaceVisible()
+                val cancel = bounds("Cancel")
+                val cancelStart = SystemClock.uptimeMillis()
+                touch(MotionEvent.ACTION_DOWN, cancel, cancelStart)
+                touch(MotionEvent.ACTION_UP, cancel, cancelStart)
                 await("Cancel did not restore overlay") { node("Close floating board") != null }
+                assertOverlayDimmed(false)
                 assertEquals(fixtureId, board.activeBoardId)
                 click("Add images")
-                await("Picker did not hide overlay") { node("Close floating board") == null }
+                await("Picker did not disable overlay input") { node("Close floating board") == null }
                 val pickerPackage = ActivityResultContracts.PickMultipleVisualMedia().createIntent(context,
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     .resolveActivity(context.packageManager).packageName
@@ -203,8 +236,11 @@ class FloatingBoardLifecycleTest {
                     } == true }
                 }
                 automation.waitForIdle(500, 5000)
+                assertOverlayDimmed(true)
+                assertOverlaySurfaceVisible()
                 cancelPicker()
                 await("Picker cancellation did not restore overlay") { node("Close floating board") != null }
+                assertOverlayDimmed(false)
                 main { assertEquals(full, board.viewport); assertEquals(fixtureId, board.activeBoardId) }
                 click(if (it == 0) "Return to full-screen mode" else "Close floating board")
                 await("Overlay did not clean up") { !FloatingBoardService.isBoardAttached && !FloatingBoardService.isServiceRunning }

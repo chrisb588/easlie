@@ -6,7 +6,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.view.View
 
-/** Stroke-only marks keep the canvas visible, with a thin contrast edge over images. */
+/** Stroke-only marks keep the canvas visible; resize marks have no outline. */
 internal class FloatingWindowAnchor(context: Context, private val kind: Kind) : View(context) {
     enum class Kind { DRAG, RESIZE_LEFT, RESIZE_RIGHT }
 
@@ -46,9 +46,11 @@ internal class FloatingWindowAnchor(context: Context, private val kind: Kind) : 
     }
 
     override fun onDraw(canvas: Canvas) {
-        paint.color = contrast
-        paint.strokeWidth = dp(7)
-        canvas.drawPath(path, paint)
+        if (kind == Kind.DRAG) {
+            paint.color = contrast
+            paint.strokeWidth = dp(7)
+            canvas.drawPath(path, paint)
+        }
         paint.color = foreground
         paint.strokeWidth = dp(4)
         canvas.drawPath(path, paint)

@@ -77,7 +77,7 @@ class FloatingBoardService : Service() {
     private fun scheduleControlsHide() {
         controlsHandler.removeCallbacks(hideControls)
         if (!controlsHeld && !boardMenuOpen && !accessibilityFocusInside &&
-            boardView?.isAttachedToWindow == true && boardView?.visibility == View.VISIBLE) {
+            boardView?.isAttachedToWindow == true && layoutParams?.alpha == 1f) {
             controlsHandler.postDelayed(hideControls, 4000L)
         }
     }
@@ -91,15 +91,14 @@ class FloatingBoardService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return when (intent?.action) {
-            ACTION_HIDE -> {
-                controlsHandler.removeCallbacks(hideControls)
-                if (boardView == null) stopSelf() else boardView?.visibility = View.GONE
+            ACTION_DIM -> {
+                if (boardView == null) stopSelf() else setBoardDimmed(true)
                 START_NOT_STICKY
             }
 
             ACTION_SHOW -> {
                 if (boardView == null) stopSelf() else {
-                    boardView?.visibility = View.VISIBLE
+                    setBoardDimmed(false)
                     showControls()
                 }
                 START_NOT_STICKY
@@ -120,6 +119,19 @@ class FloatingBoardService : Service() {
                 START_NOT_STICKY
             }
         }
+    }
+
+    private fun setBoardDimmed(dimmed: Boolean) {
+        val view = boardView ?: return
+        val params = layoutParams ?: return
+        controlsHandler.removeCallbacks(hideControls)
+        controlsHeld = false
+        params.alpha = if (dimmed) 0.5f else 1f
+        params.flags = if (dimmed) params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            else params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+        view.importantForAccessibility = if (dimmed) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        updateBoardLayout()
     }
 
     override fun onDestroy() {
@@ -335,7 +347,8 @@ class FloatingBoardService : Service() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         } catch (exception: RuntimeException) {
-            boardView?.visibility = View.VISIBLE
+            setBoardDimmed(false)
+            showControls()
             (application as EaslieApplication).board.message = "Could not open board action: ${exception.message}"
         }
     }
@@ -646,7 +659,7 @@ class FloatingBoardService : Service() {
         private const val MIN_WIDTH_DP = 280
         private const val MIN_HEIGHT_DP = 248
 
-        internal const val ACTION_HIDE = "com.chrisb588.easlie.action.HIDE_FLOATING_BOARD"
+        internal const val ACTION_DIM = "com.chrisb588.easlie.action.DIM_FLOATING_BOARD"
         internal const val ACTION_SHOW = "com.chrisb588.easlie.action.SHOW_FLOATING_BOARD"
         const val ACTION_START = "com.chrisb588.easlie.action.START_FLOATING_BOARD"
         const val ACTION_RETURN_TO_APP = "com.chrisb588.easlie.action.RETURN_TO_APP"

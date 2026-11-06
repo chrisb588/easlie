@@ -56,6 +56,26 @@ class FloatingBoardRedesignTest {
             }
         } }
     }
+    @Test fun resizeMarksHaveNoBorder() {
+        rule.runOnIdle {
+            val density = rule.activity.resources.displayMetrics.density
+            val size = (64 * density).toInt()
+            for (kind in listOf(FloatingWindowAnchor.Kind.RESIZE_LEFT, FloatingWindowAnchor.Kind.RESIZE_RIGHT)) {
+                val marker = FloatingWindowAnchor(rule.activity, kind)
+                marker.setColors(android.graphics.Color.BLACK, android.graphics.Color.RED)
+                marker.layout(0, 0, size, size)
+                val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+                try {
+                    marker.draw(android.graphics.Canvas(bitmap))
+                    val x = if (kind == FloatingWindowAnchor.Kind.RESIZE_LEFT) 8 * density else size - 8 * density
+                    val y = (30 * density).toInt()
+                    assertEquals(android.graphics.Color.BLACK, bitmap.getPixel(x.toInt(), y))
+                    assertEquals("Resize mark must have no contrast outline", 0,
+                        android.graphics.Color.alpha(bitmap.getPixel((x + 3 * density).toInt(), y)))
+                } finally { bitmap.recycle() }
+            }
+        }
+    }
     @Test fun minimumSizeHasDistinctControlsAndMenusDoNotChangeViewports() {
         val first = rule.runOnIdle { board.activeBoardId }
         create("Other fixture")

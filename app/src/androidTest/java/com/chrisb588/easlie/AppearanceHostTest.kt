@@ -144,7 +144,8 @@ class AppearanceHostTest {
                         } else null
                         val headerBounds = header?.let { Rect().also(it::getBoundsInScreen) }
                         val chromeMatches = !floating || (headerBounds != null &&
-                            screenshot.getPixel(headerBounds.left + 4, headerBounds.centerY()) == palette.surfaceVariant.toArgb())
+                            screenshot.getPixel(headerBounds.centerX(),
+                                headerBounds.top + (8 * context.resources.displayMetrics.density).toInt()) == palette.onSurfaceVariant.toArgb())
                         if (observed == palette.background.toArgb() && chromeMatches) return
                     } finally { screenshot.recycle() }
                 }
