@@ -239,9 +239,9 @@ private fun BoardLibraryRow(board: BoardStore, entry: StoredBoard, enabled: Bool
 }
 
 @Composable
-internal fun RoundControl(icon: UiIcon, label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    FilledTonalIconButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = Modifier.size(56.dp)) {
-        Icon(icon.vector, label, Modifier.size(24.dp))
+internal fun RoundControl(icon: UiIcon, label: String, enabled: Boolean = true, onClick: () -> Unit, compact: Boolean = false) {
+    FilledTonalIconButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = Modifier.size(if (compact) 48.dp else 56.dp)) {
+        Icon(icon.vector, label, Modifier.size(if (compact) 20.dp else 24.dp))
     }
 }
 
@@ -360,19 +360,20 @@ internal enum class UiIcon(val path: String) {
 
 @Composable
 internal fun BoardSelector(board: BoardStore, expanded: Boolean, onExpandedChange: (Boolean) -> Unit,
-    onOpen: (StoredBoard) -> Unit, onCreate: () -> Unit, modifier: Modifier = Modifier) {
+    onOpen: (StoredBoard) -> Unit, onCreate: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     val active = board.boards.firstOrNull { it.id == board.activeBoardId }
     val newBoardIconSize = with(LocalDensity.current) { MaterialTheme.typography.bodyLarge.fontSize.toDp() }
     BoxWithConstraints(modifier) {
         val selectorWidth = maxWidth
         Surface(modifier = Modifier.fillMaxWidth(), shape = CircleShape, enabled = board.collectionReady,
             color = MaterialTheme.colorScheme.surfaceContainer, onClick = { onExpandedChange(true) }) {
-            Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 16.dp)
+            Row(Modifier.heightIn(min = if (compact) 48.dp else 56.dp).padding(horizontal = if (compact) 12.dp else 16.dp)
                 .semantics { contentDescription = "Open board" }, verticalAlignment = Alignment.CenterVertically) {
                 Text(active?.name ?: "Open a board", Modifier.weight(1f), maxLines = 1,
+                    style = if (compact) MaterialTheme.typography.bodyMedium else LocalTextStyle.current,
                     overflow = TextOverflow.Ellipsis,
                     fontStyle = if (active == null) FontStyle.Italic else FontStyle.Normal)
-                Icon(UiIcon.Down.vector, null, Modifier.padding(start = 8.dp).size(20.dp))
+                Icon(UiIcon.Down.vector, null, Modifier.padding(start = 8.dp).size(if (compact) 18.dp else 20.dp))
             }
         }
         DropdownMenu(expanded, { onExpandedChange(false) }, shape = menuCorners, offset = DpOffset(0.dp, 8.dp),

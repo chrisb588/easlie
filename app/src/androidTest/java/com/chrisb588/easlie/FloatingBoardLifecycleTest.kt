@@ -69,6 +69,15 @@ class FloatingBoardLifecycleTest {
         }
     }
     private fun bounds(label: String): Rect = Rect().also { node(label)!!.getBoundsInScreen(it) }
+    private fun captureEmptyFixture(board: BoardStore, fixtureId: String?, filename: String) {
+        main { assertTrue(board.items.isEmpty()); assertEquals(fixtureId, board.activeBoardId) }
+        val overlay = bounds("Floating reference board")
+        val screen = checkNotNull(automation.takeScreenshot())
+        val crop = Bitmap.createBitmap(screen, overlay.left, overlay.top, overlay.width(), overlay.height())
+        File(context.cacheDir, filename).outputStream().use { crop.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        crop.recycle()
+        screen.recycle()
+    }
     private fun touch(action: Int, bounds: Rect, start: Long) {
         val event = MotionEvent.obtain(start, SystemClock.uptimeMillis(), action,
             bounds.exactCenterX(), bounds.exactCenterY(), 0)
@@ -146,21 +155,14 @@ class FloatingBoardLifecycleTest {
                 assertTrue(before.width() > 0)
                 val move = node("Move floating board")!!
                 val bounds = Rect().also(move::getBoundsInScreen)
-                assertEquals((40 * context.resources.displayMetrics.density).toInt(), bounds.height())
+                assertEquals((32 * context.resources.displayMetrics.density).toInt(), bounds.height())
                 assertEquals((200 * density).toInt(), bounds.width())
+                assertTrue("Drag target overlaps top controls", bounds.bottom <= bounds("Close floating board").top)
                 assertEquals((64 * density).toInt(), bounds("Resize floating board").height())
                 if (it == 0) {
                     SystemClock.sleep(4800)
-                    // Only the disposable empty fixture is captured for anchor visual QA.
-                    main { assertTrue(board.items.isEmpty()); assertEquals(fixtureId, board.activeBoardId) }
+                    captureEmptyFixture(board, fixtureId, "floating-anchors-review.png")
                     val overlay = bounds("Floating reference board")
-                    automation.takeScreenshot()?.let { screen ->
-                        val crop = Bitmap.createBitmap(screen, overlay.left, overlay.top, overlay.width(), overlay.height())
-                        File(context.cacheDir, "floating-anchors-review.png").outputStream().use { output ->
-                            crop.compress(Bitmap.CompressFormat.PNG, 100, output)
-                        }
-                        crop.recycle(); screen.recycle()
-                    }
                     listOf("Open board", "Return to full-screen mode", "Close floating board", "Add images").forEach { label ->
                         assertNull("Chrome did not hide: $label", node(label))
                     }
@@ -171,6 +173,8 @@ class FloatingBoardLifecycleTest {
                     touch(MotionEvent.ACTION_DOWN, overlay, start)
                     touch(MotionEvent.ACTION_UP, overlay, start)
                     await("Canvas touch did not reveal chrome") { node("Close floating board") != null }
+                    SystemClock.sleep(350)
+                    captureEmptyFixture(board, fixtureId, "floating-controls-review.png")
                     val holdStart = SystemClock.uptimeMillis()
                     touch(MotionEvent.ACTION_DOWN, overlay, holdStart)
                     SystemClock.sleep(4300)

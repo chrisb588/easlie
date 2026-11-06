@@ -29,21 +29,21 @@ internal fun FloatingBoardUi(board: BoardStore, onReturn: () -> Unit, onClose: (
         if (board.canEdit) FullScreenCanvas(board, floatingMode = true)
         AnimatedVisibility(controlsVisible, enter = fadeIn(), exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopStart)) {
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 40.dp),
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 32.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
                     BoardSelector(board, boardMenu, { boardMenu = it }, {
                         board.openBoard(it.id)
                         boardMenu = false
-                    }, { boardMenu = false; onCreateBoard() }, Modifier.widthIn(max = 256.dp).fillMaxWidth())
+                    }, { boardMenu = false; onCreateBoard() }, Modifier.widthIn(max = 192.dp).fillMaxWidth(), compact = true)
                 }
-                RoundControl(UiIcon.Fullscreen, stringResource(R.string.floating_board_return_label), onClick = onReturn)
-                RoundControl(UiIcon.Close, stringResource(R.string.floating_board_close_label), onClick = onClose)
+                RoundControl(UiIcon.Fullscreen, stringResource(R.string.floating_board_return_label), onClick = onReturn, compact = true)
+                RoundControl(UiIcon.Close, stringResource(R.string.floating_board_close_label), onClick = onClose, compact = true)
             }
         }
         AnimatedVisibility(controlsVisible, enter = fadeIn(), exit = fadeOut(),
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 104.dp, end = 16.dp)) {
-            RoundControl(UiIcon.Add, "Add images", board.canEdit, onAddImages)
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 88.dp, end = 16.dp)) {
+            RoundControl(UiIcon.Add, "Add images", board.canEdit, onAddImages, compact = true)
         }
         // Leave the corner resize targets and centered Deselect action clear.
         NoticeStack(board, null, Modifier.align(Alignment.BottomStart)
