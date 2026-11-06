@@ -2,6 +2,14 @@ package com.chrisb588.easlie
 
 /** Pure sizing logic used by the overlay resize handle and its JVM tests. */
 internal object FloatingBoardGeometry {
+    fun containsRoundedPoint(x: Float, y: Float, width: Int, height: Int, radius: Int): Boolean {
+        if (x < 0f || y < 0f || x >= width || y >= height) return false
+        val r = radius.toFloat().coerceAtMost(minOf(width, height) / 2f)
+        val dx = x - x.coerceIn(r, width - r)
+        val dy = y - y.coerceIn(r, height - r)
+        return dx * dx + dy * dy <= r * r
+    }
+
     fun resizedFromLeft(
         initialX: Int,
         initialWidth: Int,

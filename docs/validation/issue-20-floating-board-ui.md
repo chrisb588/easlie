@@ -1,0 +1,101 @@
+# Issue #20 — Floating-board redesign
+
+## Lead-approved design
+
+On 2026-11-06, the lead supplied the annotated floating-board wireframe and confirmed 32 dp window corners. After reviewing the issue's required close action, the lead placed a circular X Close button at top right and Return to full-screen immediately to its left. Add images sits below Close. The top bar moves the window; the two bottom corners resize it. Window handles are separate from canvas input.
+
+The lead confirmed that the top-left board pill matches the full-screen dropdown, including opening another board and New board. Rename, deletion, theme and About remain available by returning to full-screen. Warnings and errors occupy the lower-left area; selection-only Deselect sits at bottom center. The shared canvas fills the rounded host, with drawing and hit testing using that same coordinate space.
+
+Issue #19 was already merged as PR #50 before this work. This branch starts from its merged main rather than reopening the completed prerequisite branch.
+
+## Implementation
+
+Both hosts reuse the board selector, round controls, notices and canvas. Window corners are 32 dp. Circular actions remain 56 dp; native move and resize targets are at least 48 dp. Controls remain visible, replacing the previous auto-hiding chrome and its reveal-controls hint. Rounded invisible corners do not accept initial window/canvas touches.
+
+The minimum window is 280 × 248 dp. This leaves separate space for the top controls, Add images, a scrollable notice region, Deselect and bottom resize targets. The initial size remains 360 × 260 dp. Notices reserve the right-side Add images column and bottom selection action. Board names truncate within their pill; the dropdown scrolls when needed.
+
+An unexported translucent activity owns the photo picker and New board form. The existing overlay remains visible until activity launch, then hides while system/keyboard input is in use. Completion or cancellation restores the existing overlay. A delayed restoration request with no existing overlay stops its service instead of creating an idle one. Creation and opening use the existing board-store operations. Floating imports use the floating viewport and leave the saved full-screen viewport unchanged.
+
+The foreground notification, permission checks, image cache ownership, shared gestures, saves and cleanup continue through the existing service/store implementation. Configuration changes refit the window to available bounds. No profiling or benchmarking is included.
+
+## Automated validation
+
+Host validation passed `:app:assembleDebug`, `:app:assembleDebugAndroidTest`, `:app:testDebugUnitTest`, `:app:lintDebug` and `git diff --check`. All 55 JVM tests passed, including the added rounded-corner input test. Lint reported zero errors, 11 warnings and one hint. No dependencies were changed.
+
+The first connected SM-X616B batch passed `OK (32 tests)`: FloatingBoardRedesignTest, FullScreenRedesignTest, CanvasGestureOwnershipTest, CanvasResizeContinuationTest and CanvasInterruptionTest. After the final native-handle backplates and notice spacing, all four FloatingBoardRedesignTest cases passed again. These cover shared host bounds, separate controls and callbacks, board switching, notice/Deselect separation at 280 × 248 dp, floating-viewport import placement, and portrait/landscape host constraints with live light/dark recomposition. The orientation checks resize the isolated Compose host; they do not establish physical-device rotation evidence.
+
+The final real-window lifecycle run passed `OK (1 test)` on the same production APK. It verifies duplicate-start protection; both native resize handles; the 280 × 248 dp minimum; right-edge preservation during left resizing; window movement without changing either viewport; New board cancellation; system-picker cancellation; Return and Close cleanup; removal of the foreground notification; and a stale restoration request leaving no idle service. The original active board and board list were restored and checked. Across these batches, all 33 distinct instrumentation cases passed; the complete 33-case set was not rerun as one final batch.
+
+The lifecycle harness required three setup corrections before its successful run: temporary notification permission on a tablet with notifications denied, waiting for the delegated system picker's focused/idle window and using its dismissal control, and finishing the current activities rather than an ActivityScenario instance replaced by repeated Return. Earlier failed harness runs are not counted as passing evidence. No production changes were needed for these harness corrections.
+
+Tests use synthetic images and isolated cache boards, or a disposable empty board for real overlay/action-window lifecycle checks. The lifecycle test restores the original active board and verifies the original board list. APKs are installed with `adb install -r`, retaining app data; the test runner never uninstalls the app. Notification permission is temporarily granted by the host test wrapper and restored in `finally`. No user board image data is inspected.
+
+The configured PR template was unavailable; the PR uses an equivalent concise change/validation description.
+
+Independent acceptance and standards/spec reviews found a notice/control overlap at the original smaller minimum and low-contrast native handles over images. The larger minimum and reserved notice area fix the overlap; opaque theme-aware backplates fix handle contrast. Follow-up reviews reported no remaining concrete implementation findings.
+
+## Lead smoke-test evidence
+
+At initial review, this assessment was pending. The final lead-reported assessment is recorded separately below. Design approval above and automated results are not substitutes for that assessment.
+
+## Lead-requested anchor and visibility refinements — 2026-11-06
+
+The lead requested removal of the anchor backplates, a longer drag mark, larger resize marks that follow the rounded corners, and restoration of the four-second inactivity timeout. The lead confirmed that touching anywhere on the floating board reveals the controls. Deselect and notices are excluded from auto-hide; notices retain their existing expiry and recovery-persistence rules.
+
+The drag mark is now a 176 dp stroke within a 200 × 48 dp touch target. Each resize mark occupies a 64 × 64 dp target, with straight edge segments joined by a 24 dp arc inset 8 dp from the window's 32 dp corner. These marks have no filled backplates. A thin contrasting outline keeps their strokes distinguishable over images. Window movement, left/right resize anchoring and input boundaries retain their existing behavior.
+
+Only the board pill, Return, Close and Add images fade after four seconds without interaction. Touching the host or activating an anchor reveals them. An ongoing touch, an open board dropdown or accessibility focus suspends the timer. Release/dismissal restarts the delay. Action activity hide/show and window teardown cancel pending timeout callbacks. Clearing accessibility focus reschedules the timer without revealing controls that just hid. The shared NoticeStack and canvas-owned Deselect remain outside this visibility state.
+
+Host builds, all 55 JVM tests, lint and diff checks passed after the production refinements. Lint completed with zero errors, 13 warnings and one hint. The final connected-tablet batch passed `OK (7 tests)`: FloatingBoardLifecycleTest, all five FloatingBoardRedesignTest cases, and CanvasHostInputTest. It covers the four-second timeout, touch-to-reveal, held-touch and open-menu protection, persistent Retry with hidden controls, independent transient-notice expiry and Deselect, both native resize anchors, and canvas-versus-window input. The original active board and board list were restored and checked; the existing notification permission setting was preserved. Earlier harness failures are not counted as passing evidence. The native harness refreshes Android's accessibility cache before checking hidden controls and scopes their labels to the overlay, avoiding stale nodes or the matching fullscreen controls beneath its fixture. The persistent import notice test resumes the animation clock before scrolling to Retry in the narrow notice region.
+
+A screenshot captured only the disposable empty fixture after its controls hid. Visual inspection confirmed the longer unboxed drag bar and mirrored curved corner strokes. No user board image data was inspected. The updated native test also checks that anchors remain accessible, canvas touch reveals the controls, held touch and board-menu interaction prevent premature hiding, and the larger targets preserve move/resize behavior.
+
+## Anchor spacing refinement — 2026-11-06
+
+The lead requested the drag mark closer to the top edge, matching the resize marks' inset. The lead confirmed that smaller resize marks should shorten only their straight ends. The drag stroke now sits 8 dp from the top instead of 24 dp. After a further request for a smaller mark, each resize straight end decreases from 20 to 4 dp; the 24 dp corner arcs, stroke widths, contrast outlines and resize touch targets remain unchanged.
+
+The lead also requested less space between the drag mark and top buttons. The top button row moves from 48 to 40 dp, and Add images moves up by the same 8 dp. The wide drag target becomes 200 × 40 dp so its input area ends before the buttons begin; resize targets remain 64 × 64 dp. No additional reviews are requested for these refinements.
+
+Debug and instrumentation APK builds, lint, all 55 JVM tests and the final seven-case affected tablet batch passed. The empty-fixture screenshot was inspected to confirm the 8 dp drag inset and smaller resize ends. The native regression verifies the adjusted drag bounds; UI and input tests cover the tighter button row. No new test cases were added, and further reviews were skipped as requested. The original board/list and notification setting were preserved.
+
+## Compact floating controls — 2026-11-06
+
+The lead requested the top buttons higher again and a trial of smaller buttons and board pill in floating mode, with reviews skipped. The floating row moves from 40 to 32 dp from the top; Add images moves to 88 dp. Floating round buttons decrease from 56 to 48 dp, with 20 dp icons instead of 24 dp. The pill also decreases to 48 dp tall, with a 192 dp width cap, smaller text/chevron and 12 dp horizontal padding. Fullscreen defaults remain at 56 dp with their existing typography, icons and width.
+
+The native drag area is 200 × 32 dp and ends before the top controls begin. Its visible stroke stays at an 8 dp inset. Resize markers, shared canvas gestures, four-second visibility rules, Deselect and notice behavior are unchanged. The existing native test checks that the drag area does not overlap the top buttons. Existing floating/fullscreen UI tests check their separate sizes.
+
+Debug app/instrumentation builds, all 55 JVM tests, lint and diff checks passed. The final eight-case tablet batch passed: five FloatingBoardRedesignTest cases, FloatingBoardLifecycleTest, CanvasHostInputTest and the fullscreen size/navigation regression. This verifies compact 48 dp floating controls alongside unchanged 56 dp fullscreen controls, input separation, board switching, notice behavior, mode transitions and cleanup. The empty-fixture screenshot with controls visible was inspected for placement and size. Original board/list and notification settings were preserved. No additional reviews were run, as requested.
+
+## Review fixes — 2026-11-06
+
+The lead requested removal of the resize marks' contrast outlines. Both resize marks now use only their foreground stroke; their geometry and touch targets are unchanged. The drag mark retains its contrast outline. A raster assertion checks both resize marks for foreground pixels and transparent pixels where their outlines previously appeared. The disposable empty-board screenshot was inspected after the change.
+
+The lead approved keeping the floating board visible at 50% opacity while New board or the image picker is open. The action activity now dims the existing window instead of hiding it. The window becomes non-touchable and its accessibility descendants are hidden until the action finishes. Cancellation and completion restore full opacity, touch and accessibility input, and the normal inactivity timeout. The timeout stays suspended while dimmed. Android may independently suppress overlays in protected system windows; on the connected tablet, WindowManager reported the overlay surface visible during both the New board form and the focused system picker.
+
+The stale AppearanceHostTest assertion now samples the drag mark's foreground stroke rather than its removed filled background. Live light/dark/system appearance propagation and board switching pass again through the real fullscreen and floating hosts.
+
+Debug app and instrumentation builds, all 55 JVM tests, lint (zero errors, 13 warnings and one hint), and diff checks passed. All nine affected tablet tests passed: six FloatingBoardRedesignTest cases, FloatingBoardLifecycleTest, AppearanceHostTest and CanvasHostInputTest. After adding the WindowManager surface-visibility assertion, FloatingBoardLifecycleTest passed again. It verifies opacity, disabled touch/accessibility input, visible overlay surfaces, touch-based New board cancellation, picker cancellation, restored input, and the existing transition/notification cleanup behavior. The original board/list, appearance, system night mode and notification permission were restored. Test APK and generated device screenshots were removed after verification. Lead task assessment remains separate and pending.
+
+## Transparency reverted — 2026-11-06
+
+The lead requested restoring the previous hiding behavior after noting that the translucent overlay remains above the New board form and image picker. This supersedes the transparency behavior described in the preceding section. The action activity again hides the existing overlay while either action is open, then restores it on completion or cancellation. The service, action activity and lifecycle regression return to their pre-transparency implementation. Resize-marker border removal, its raster regression and the corrected appearance assertion remain in place. This scoped revert is recorded in its own commit.
+
+Debug app and instrumentation builds, all 55 JVM tests, lint (zero errors, 13 warnings and one hint), and diff checks passed. The three focused tablet checks passed: FloatingBoardLifecycleTest, AppearanceHostTest and FloatingBoardRedesignTest#resizeMarksHaveNoBorder. They verify hiding/restoration and lifecycle cleanup, live host theme updates, and preservation of border-free resize marks. Test fixtures restored the original board/list and appearance settings. Notification permission was preserved, test APK and device screenshots were removed, and no app service remained afterward.
+
+## Final automated evidence for AC8 — 2026-11-06
+
+The final combined tablet batch ran against the application and test code at `e4ff154` and passed `OK (40 tests)` on SM-X616B. The subsequent evidence update changes only this document. All 55 JVM tests passed, debug app and instrumentation builds passed, lint reported zero errors (13 warnings and one hint), and `git diff --check` passed.
+
+Input boundaries and functional interaction are covered by FloatingBoardLifecycleTest, all six FloatingBoardRedesignTest cases, FullScreenRedesignTest, CanvasHostInputTest, CanvasGestureOwnershipTest, CanvasResizeContinuationTest and CanvasInterruptionTest. Together they exercise separate native move/resize targets, canvas pan/pinch over images, selected-image transforms, both resizing gestures, explicit deselection with an oversized image, interruption recovery, action cancellation/restoration and inactivity behavior. AppearanceHostTest verifies immediate light/dark/system theme updates through both real hosts and board switches. These are functional checks, not profiling or benchmarks.
+
+Permission handling is covered by FullScreenRedesignTest#deniedOverlayShowsContextualGuidanceAndCancelLeavesCanvasUsable: injected denied permission shows guidance, cancellation leaves Add images usable without starting floating mode, and Open overlay settings invokes the settings callback. This is a UI regression with injected permission state, not an actual system permission-revocation test.
+
+Resource cleanup is covered by both ImageRendererTest#clearingSeveralQueuedDecodesDoesNotModifyTheCancellationIteration and ImageRendererTest#sharperDecodeRetainsPreviewAndLeavingViewportReleasesImages, plus BoardRenderingPersistenceTest#outgoingHostCannotClearOrResizeTheActiveFloatingRenderer. These verify queued-decode cancellation, release of offscreen rendered images and preservation of the renderer owned by the current host. The real-window lifecycle case checks duplicate-start protection and removal of the window, service and notification after Return/Close. Native-host tests restore and assert the original board/list and viewports. The notification setting was preserved; the test APK and generated screenshots were removed; the final service inspection reported no app service.
+
+AC8's automated evidence is recorded here separately from the lead-reported smoke assessment below. Earlier batches and their limits remain historical records above.
+
+## Final lead-reported assessment — 2026-11-06
+
+Before requesting verification of the final evidence-recording AC, the lead marked ACs 1–7 complete in issue #20. This includes the approved design, window/canvas controls and gestures, accessibility and orientation/readability assessment, Return/Close preservation and cleanup, repeated transitions and appearance updates, and the specified user-task assessment in AC7. These checked criteria are the lead's reported assessment. They are recorded separately from the agent-run regressions; no additional task-by-task observations or lead screenshots were supplied.
+
+The lead then authorized merging after the final AC is verified. The agent is verifying the automated evidence and its separation from this lead-reported assessment, rather than performing or claiming the lead's smoke tests.

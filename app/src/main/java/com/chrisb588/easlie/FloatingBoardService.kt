@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.PixelFormat
@@ -29,13 +30,9 @@ import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
-import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
-import androidx.core.content.edit
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -47,13 +44,12 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.EaslieTheme
-import com.chrisb588.easlie.ui.theme.AppearanceSettings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.SideEffect
-import androidx.compose.foundation.layout.Column
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.toArgb
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -66,10 +62,25 @@ class FloatingBoardService : Service() {
     private var foregroundStarted = false
     private var composeOwner: OverlayComposeOwner? = null
     private val controlsHandler = Handler(Looper.getMainLooper())
-    private var hideControls: Runnable? = null
-    private var accessibilityFocusInside = false
     private var returnAfterStop = false
-    private var shouldMarkHintSeen = false
+    private var controlsVisible by mutableStateOf(true)
+    private var controlsHeld = false
+    private var boardMenuOpen = false
+    private var accessibilityFocusInside = false
+    private val hideControls = Runnable { controlsVisible = false }
+
+    private fun showControls() {
+        controlsVisible = true
+        scheduleControlsHide()
+    }
+
+    private fun scheduleControlsHide() {
+        controlsHandler.removeCallbacks(hideControls)
+        if (!controlsHeld && !boardMenuOpen && !accessibilityFocusInside &&
+            boardView?.isAttachedToWindow == true && boardView?.visibility == View.VISIBLE) {
+            controlsHandler.postDelayed(hideControls, 4000L)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -80,6 +91,20 @@ class FloatingBoardService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return when (intent?.action) {
+            ACTION_HIDE -> {
+                controlsHandler.removeCallbacks(hideControls)
+                if (boardView == null) stopSelf() else boardView?.visibility = View.GONE
+                START_NOT_STICKY
+            }
+
+            ACTION_SHOW -> {
+                if (boardView == null) stopSelf() else {
+                    boardView?.visibility = View.VISIBLE
+                    showControls()
+                }
+                START_NOT_STICKY
+            }
+
             ACTION_STOP -> {
                 stopAndCleanUp()
                 START_NOT_STICKY
@@ -194,17 +219,12 @@ class FloatingBoardService : Service() {
         try {
             val view = createBoardView(contextForWindow)
             manager.addView(view, params)
-            if (shouldMarkHintSeen) {
-                getSharedPreferences(PREFERENCES, MODE_PRIVATE).edit {
-                    putBoolean(HINT_SEEN, true)
-                }
-                shouldMarkHintSeen = false
-            }
             windowContext = contextForWindow
             windowManager = manager
             layoutParams = params
             boardView = view
             isBoardAttached = true
+            showControls()
             return true
         } catch (exception: RuntimeException) {
             Log.e(TAG, "Unable to attach floating board", exception)
@@ -236,91 +256,38 @@ class FloatingBoardService : Service() {
         }
     }
 
-    // These anchors use physical display edges, independent of the text direction.
     @SuppressLint("RtlHardcoded")
     private fun createBoardView(context: Context): View {
         val root = object : FrameLayout(context) {
             override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) showControls()
+                if (event.actionMasked == MotionEvent.ACTION_DOWN &&
+                    !FloatingBoardGeometry.containsRoundedPoint(event.x, event.y, width, height, dp(32))) return false
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { controlsHeld = true; showControls() }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { controlsHeld = false; showControls() }
+                }
                 return super.dispatchTouchEvent(event)
             }
 
             override fun requestSendAccessibilityEvent(child: View, event: AccessibilityEvent): Boolean {
-                if (event.eventType == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED) {
-                    accessibilityFocusInside = true
-                    showControls()
-                }
-                if (event.eventType == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED) {
-                    accessibilityFocusInside = false
-                    scheduleControlsHide()
+                when (event.eventType) {
+                    AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED -> { accessibilityFocusInside = true; showControls() }
+                    AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED -> { accessibilityFocusInside = false; scheduleControlsHide() }
                 }
                 return super.requestSendAccessibilityEvent(child, event)
             }
         }.apply {
             contentDescription = getString(R.string.floating_board_overlay_label)
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(35, 36, 40))
-                cornerRadius = dp(16).toFloat()
-            }
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = GradientDrawable().apply { setColor(Color.TRANSPARENT); cornerRadius = dp(32).toFloat() }
+            clipToOutline = true
         }
-
-        val content = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        root.addView(
-            content,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-        )
-
-        val header = TextView(context).apply {
-            text = getString(R.string.floating_board_drag_hint)
-            contentDescription = getString(R.string.floating_board_move_label)
-            setTextColor(Color.WHITE)
-            setGravity(Gravity.CENTER_VERTICAL)
-            setPadding(dp(8), 0, dp(8), 0)
-            setBackgroundColor(Color.rgb(74, 76, 84))
-        }
-        content.addView(
-            header,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(44)
-            )
-        )
-
-        val controls = LinearLayout(context).apply {
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-        }
-        val returnButton = Button(context).apply {
-            text = getString(R.string.return_to_easlie)
-            contentDescription = getString(R.string.floating_board_return_label)
-            setOnClickListener { returnToFullScreen() }
-        }
-        val closeButton = Button(context).apply {
-            text = getString(R.string.stop_floating_board)
-            contentDescription = getString(R.string.floating_board_close_label)
-            setOnClickListener { stopAndCleanUp() }
-        }
-        controls.addView(returnButton, buttonLayoutParams())
-        controls.addView(closeButton, buttonLayoutParams())
-        content.addView(
-            controls,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(48)
-            )
-        )
-
         val owner = OverlayComposeOwner()
         root.setViewTreeLifecycleOwner(owner)
         root.setViewTreeViewModelStoreOwner(owner)
         root.setViewTreeSavedStateRegistryOwner(owner)
         composeOwner = owner
-        val boardCanvas = ComposeView(context).apply {
+        val handles = mutableListOf<FloatingWindowAnchor>()
+        root.addView(ComposeView(context).apply {
             setContent {
                 val store = (application as EaslieApplication).board
                 androidx.compose.runtime.LaunchedEffect(store.activeBoardId, store.collectionReady) {
@@ -329,83 +296,54 @@ class FloatingBoardService : Service() {
                 EaslieTheme {
                     val colors = MaterialTheme.colorScheme
                     SideEffect {
-                        (root.background as GradientDrawable).setColor(colors.surface.toArgb())
-                        themedChrome.forEach { view ->
-                            view.setTextColor(colors.onSurfaceVariant.toArgb())
-                            view.setBackgroundColor(colors.surfaceVariant.toArgb())
-                            if (view is Button) view.backgroundTintList =
-                                android.content.res.ColorStateList.valueOf(colors.surfaceVariant.toArgb())
-                        }
+                        (root.background as GradientDrawable).setColor(colors.background.toArgb())
+                        handles.forEach { it.setColors(colors.onSurfaceVariant.toArgb(), colors.surface.toArgb()) }
                     }
-                    Column {
-                        AppearanceSettings((application as EaslieApplication).appearance, floatingMode = true)
-                        FullScreenCanvas(
-                            board = store,
-                            floatingMode = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    FloatingBoardUi(store, ::returnToFullScreen, ::stopAndCleanUp,
+                        { openBoardAction(FloatingBoardActionActivity.ADD_IMAGES) },
+                        { openBoardAction(FloatingBoardActionActivity.CREATE_BOARD) },
+                        controlsVisible = controlsVisible,
+                        onBoardMenuVisibilityChanged = { boardMenuOpen = it; showControls() })
                 }
             }
+        }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        val moveHandle = FloatingWindowAnchor(context, FloatingWindowAnchor.Kind.DRAG).apply {
+            contentDescription = getString(R.string.floating_board_move_label)
         }
-        content.addView(
-            boardCanvas,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
-
-        val resizeHandle = TextView(context).apply {
-            text = "↘"
-            textSize = 22f
-            contentDescription = getString(R.string.floating_board_resize_label)
-            setTextColor(Color.WHITE)
-            setGravity(Gravity.CENTER)
-            setBackgroundColor(Color.rgb(74, 76, 84))
+        handles.add(moveHandle)
+        root.addView(moveHandle, FrameLayout.LayoutParams(dp(200), dp(32), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+        addMoveListener(moveHandle)
+        for (fromLeft in listOf(true, false)) {
+            val resizeHandle = FloatingWindowAnchor(context,
+                if (fromLeft) FloatingWindowAnchor.Kind.RESIZE_LEFT else FloatingWindowAnchor.Kind.RESIZE_RIGHT).apply {
+                contentDescription = getString(if (fromLeft) R.string.floating_board_resize_left_label else R.string.floating_board_resize_label)
+            }
+            handles.add(resizeHandle)
+            root.addView(resizeHandle, FrameLayout.LayoutParams(dp(64), dp(64),
+                Gravity.BOTTOM or if (fromLeft) Gravity.LEFT else Gravity.RIGHT))
+            addResizeListener(resizeHandle, fromLeft)
         }
-        root.addView(
-            resizeHandle,
-            FrameLayout.LayoutParams(dp(40), dp(40), Gravity.BOTTOM or Gravity.RIGHT)
-        )
-
-        val leftResizeHandle = TextView(context).apply {
-            text = "↙"
-            textSize = 22f
-            contentDescription = getString(R.string.floating_board_resize_left_label)
-            setTextColor(Color.WHITE)
-            setGravity(Gravity.CENTER)
-            setBackgroundColor(Color.rgb(74, 76, 84))
-        }
-        root.addView(
-            leftResizeHandle,
-            FrameLayout.LayoutParams(dp(40), dp(40), Gravity.BOTTOM or Gravity.LEFT)
-        )
-
-        addMoveListener(header)
-        addResizeListener(resizeHandle)
-        addResizeListener(leftResizeHandle, fromLeft = true)
-        val hint = TextView(context).apply {
-            text = getString(R.string.floating_board_first_run_hint)
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.rgb(74, 76, 84))
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            setOnClickListener { visibility = View.GONE }
-        }
-        val preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
-        if (!preferences.getBoolean(HINT_SEEN, false)) {
-            shouldMarkHintSeen = true
-            root.addView(hint, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER
-            ))
-        }
-        themedChrome = listOf(header, returnButton, closeButton, resizeHandle, leftResizeHandle, hint)
-        controlViews = listOf(header, controls, resizeHandle, leftResizeHandle)
-        showControls()
         owner.start()
         return root
+    }
+
+    private fun openBoardAction(action: String) {
+        try {
+            // Keep the overlay visible until launch so Android can grant background activity entry.
+            startActivity(Intent(this, FloatingBoardActionActivity::class.java).apply {
+                this.action = action
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (exception: RuntimeException) {
+            boardView?.visibility = View.VISIBLE
+            (application as EaslieApplication).board.message = "Could not open board action: ${exception.message}"
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        synchronizeBoardPosition()
+        updateBoardLayout()
     }
 
     private fun addMoveListener(handle: View) {
@@ -601,12 +539,10 @@ class FloatingBoardService : Service() {
     }
 
     private fun removeBoardWindow() {
-        hideControls?.let(controlsHandler::removeCallbacks)
-        hideControls = null
+        controlsHandler.removeCallbacks(hideControls)
+        controlsHeld = false
+        boardMenuOpen = false
         accessibilityFocusInside = false
-        shouldMarkHintSeen = false
-        controlViews = emptyList()
-        themedChrome = emptyList()
         val view = boardView ?: return
         try {
             windowManager?.removeViewImmediate(view)
@@ -683,11 +619,6 @@ class FloatingBoardService : Service() {
         this.action = action
     }
 
-    private fun buttonLayoutParams() = LinearLayout.LayoutParams(
-        LinearLayout.LayoutParams.WRAP_CONTENT,
-        dp(48)
-    )
-
     private fun overlayWindowType(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
     } else {
@@ -697,34 +628,6 @@ class FloatingBoardService : Service() {
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).roundToInt()
-
-    private var themedChrome: List<TextView> = emptyList()
-    private var controlViews: List<View> = emptyList()
-
-    private fun showControls() {
-        controlViews.forEach {
-            it.visibility = View.VISIBLE
-            it.alpha = 1f
-        }
-        scheduleControlsHide()
-    }
-
-    private fun scheduleControlsHide() {
-        hideControls?.let(controlsHandler::removeCallbacks)
-        val task = Runnable {
-            val root = boardView
-            if (accessibilityFocusInside || root?.findFocus() != null) {
-                scheduleControlsHide()
-            } else {
-                // The move bar keeps a large transparent target so a user can
-                // reveal the controls without finding a tiny handle.
-                controlViews.firstOrNull()?.alpha = 0.01f
-                controlViews.drop(1).forEach { it.visibility = View.INVISIBLE }
-            }
-        }
-        hideControls = task
-        controlsHandler.postDelayed(task, CONTROLS_TIMEOUT_MS)
-    }
 
     companion object {
         @Volatile var isBoardAttached = false
@@ -741,11 +644,10 @@ class FloatingBoardService : Service() {
         private const val DEFAULT_X_DP = 24
         private const val DEFAULT_Y_DP = 72
         private const val MIN_WIDTH_DP = 280
-        private const val MIN_HEIGHT_DP = 200
-        private const val CONTROLS_TIMEOUT_MS = 4000L
-        private const val PREFERENCES = "floating_board"
-        private const val HINT_SEEN = "controls_hint_seen"
+        private const val MIN_HEIGHT_DP = 248
 
+        internal const val ACTION_HIDE = "com.chrisb588.easlie.action.HIDE_FLOATING_BOARD"
+        internal const val ACTION_SHOW = "com.chrisb588.easlie.action.SHOW_FLOATING_BOARD"
         const val ACTION_START = "com.chrisb588.easlie.action.START_FLOATING_BOARD"
         const val ACTION_RETURN_TO_APP = "com.chrisb588.easlie.action.RETURN_TO_APP"
         const val ACTION_STOP = "com.chrisb588.easlie.action.STOP_FLOATING_BOARD"

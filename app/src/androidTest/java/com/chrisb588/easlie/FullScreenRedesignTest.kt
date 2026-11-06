@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
@@ -86,6 +87,8 @@ class FullScreenRedesignTest {
         val first = create("First")
         create("Second")
         screen()
+        rule.onNodeWithContentDescription("Home").assertTouchHeightIsEqualTo(56.dp)
+        rule.onNodeWithContentDescription("Open board").assertHeightIsEqualTo(56.dp)
         val canvas = rule.onNodeWithTag(CanvasTestTags.FullScreenBoard).fetchSemanticsNode().boundsInRoot
         val host = rule.onNodeWithTag("host-bounds").fetchSemanticsNode().boundsInRoot
         assertEquals(host, canvas)
