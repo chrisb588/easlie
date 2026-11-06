@@ -6,6 +6,7 @@ window above another app.
 
 ## Features
 
+- Create, open, rename, and delete multiple independent boards, each with its own images and saved views.
 - Import multiple images from the Android photo picker or share images from other apps.
 - Pan and zoom the canvas.
 - Move, resize, rotate, and delete images.

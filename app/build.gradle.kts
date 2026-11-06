@@ -13,8 +13,8 @@ android {
         applicationId = "com.chrisb588.easlie"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
