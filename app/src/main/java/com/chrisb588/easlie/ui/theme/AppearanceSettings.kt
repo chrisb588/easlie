@@ -1,5 +1,7 @@
 package com.chrisb588.easlie.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -9,12 +11,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.RadioButton
 import androidx.compose.runtime.*
 
-/** Temporary control placement; the host redesign decides its final location. */
+/** The floating host keeps its inline panel; full-screen opens it from Actions. */
 @Composable
-fun AppearanceSettings(store: AppearanceStore, floatingMode: Boolean = false) {
+fun AppearanceSettings(
+    store: AppearanceStore,
+    floatingMode: Boolean = false,
+    dialogOnly: Boolean = false,
+    onClose: () -> Unit = {},
+) {
     var open by remember { mutableStateOf(false) }
-    TextButton(onClick = { open = !open }) { Text("Appearance") }
-    if (open) {
+    val close = { open = false; onClose() }
+    if (!dialogOnly) TextButton(onClick = { open = !open }) { Text("Appearance") }
+    if (open || dialogOnly) {
         val choices: @Composable () -> Unit = {
             Column {
                 Appearance.entries.forEach { choice ->
@@ -36,9 +44,10 @@ fun AppearanceSettings(store: AppearanceStore, floatingMode: Boolean = false) {
             // Keep this panel inside the overlay; a separate activity dialog has no window token.
             Surface { choices() }
         } else {
-            AlertDialog(onDismissRequest = { open = false }, title = { Text("Appearance") },
+            AlertDialog(shape = RoundedCornerShape(16.dp),
+                onDismissRequest = close, title = { Text("Appearance", style = cardHeaderStyle) },
                 text = choices, confirmButton = {
-                    TextButton(onClick = { open = false }) { Text("Close") }
+                    TextButton(onClick = close) { Text("Close") }
                 })
         }
     }

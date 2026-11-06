@@ -1,11 +1,15 @@
 package com.chrisb588.easlie
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTouchHeightIsEqualTo
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -34,8 +38,7 @@ class AboutSectionTest {
                 .performClick()
             for (appearance in Appearance.entries) {
                 compose.runOnIdle { app.appearance.select(appearance) }
-                compose.onNodeWithText("About easlie").assertIsDisplayed()
-                compose.onNodeWithText("Name: easlie").assertIsDisplayed()
+                compose.onNode(hasText("easlie") and hasAnyAncestor(isDialog())).assertIsDisplayed()
                 compose.onNodeWithText("Version: v$installedVersion").assertIsDisplayed()
                 compose.onNodeWithText("Close")
                     .assertHasClickAction()
@@ -55,12 +58,13 @@ class AboutSectionTest {
         @Suppress("DEPRECATION")
         val installedVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName
         ActivityScenario.launch(MainActivity::class.java).use {
+            compose.onNodeWithContentDescription("Actions").performClick()
             compose.onNodeWithText("About").assertIsDisplayed().performClick()
-            compose.onNodeWithText("About easlie").assertIsDisplayed()
-            compose.onNodeWithText("Name: easlie").assertIsDisplayed()
+            compose.onNode(hasText("easlie") and hasAnyAncestor(isDialog())).assertIsDisplayed()
             compose.onNodeWithText("Version: v$installedVersion").assertIsDisplayed()
             compose.onNodeWithText("Close").assertIsDisplayed().performClick()
-            compose.onNodeWithText("About easlie").assertDoesNotExist()
+            compose.onNode(isDialog()).assertDoesNotExist()
+            compose.onNodeWithContentDescription("Actions").performClick()
             compose.onNodeWithText("About").assertIsDisplayed().performClick()
             compose.onNodeWithText("Version: v$installedVersion").assertIsDisplayed()
             compose.onNodeWithText("Close").performClick()

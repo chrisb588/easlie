@@ -16,35 +16,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.runtime.remember
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.chrisb588.easlie.images.sharedImageUris
-import com.chrisb588.easlie.canvas.FullScreenCanvas
 import com.chrisb588.easlie.ui.theme.EaslieTheme
-import com.chrisb588.easlie.ui.theme.AppearanceSettings
-import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
     private val board get() = (application as EaslieApplication).board
@@ -197,137 +178,5 @@ class MainActivity : ComponentActivity() {
                 exception.message ?: exception.javaClass.simpleName
             )
         }
-    }
-}
-
-@Composable
-internal fun FloatingBoardScreen(
-    board: BoardStore,
-    onAddImages: () -> Unit,
-    overlayPermissionGranted: Boolean,
-    errorMessage: String?,
-    onOpenOverlaySettings: () -> Unit,
-    onStartFloatingBoard: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var creating by remember { mutableStateOf(false) }
-    var opening by remember { mutableStateOf(false) }
-    var deleting by remember { mutableStateOf<StoredBoard?>(null) }
-    var renaming by remember { mutableStateOf<StoredBoard?>(null) }
-    var name by remember { mutableStateOf("Board 1") }
-    var renameName by remember { mutableStateOf("") }
-    if (creating) {
-        AlertDialog(onDismissRequest = { creating = false }, title = { Text("Create board") },
-            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Board name") }) },
-            confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { board.createBoard(name); creating = false }) { Text("Create") } },
-            dismissButton = { TextButton(onClick = { creating = false }) { Text("Cancel") } })
-    }
-    if (opening) {
-        AlertDialog(onDismissRequest = { opening = false }, title = { Text("Open board") },
-            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-                board.boards.forEach { entry ->
-                    Row {
-                        TextButton(onClick = { board.openBoard(entry.id); opening = false }) { Text(entry.name) }
-                        TextButton(onClick = { deleting = entry; opening = false }) { Text("Delete") }
-                        TextButton(onClick = { renameName = entry.name; renaming = entry; opening = false }) { Text("Rename") }
-                    }
-                }
-            } }, confirmButton = { TextButton(onClick = { opening = false }) { Text("Close") } })
-    }
-    deleting?.let { entry ->
-        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("Delete ${entry.name}?") },
-            text = { Text("This board and its images will be removed from easlie.") },
-            confirmButton = { TextButton(onClick = { board.deleteBoard(entry.id); deleting = null }) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } })
-    }
-    renaming?.let { entry ->
-        AlertDialog(onDismissRequest = { renaming = null }, title = { Text("Rename board") },
-            text = { OutlinedTextField(value = renameName, onValueChange = { renameName = it }, label = { Text("Board name") }) },
-            confirmButton = { TextButton(enabled = renameName.isNotBlank(), onClick = {
-                board.renameBoard(entry.id, renameName)
-                renaming = null
-            }) { Text("Save") } },
-            dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } })
-    }
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.floating_board_title),
-            style = MaterialTheme.typography.headlineSmall
-        )
-        (LocalContext.current.applicationContext as? EaslieApplication)?.let {
-            AppearanceSettings(it.appearance)
-        }
-        AboutSection()
-        board.boards.firstOrNull { it.id == board.activeBoardId }?.let { Text(it.name) }
-        Row {
-            Button(enabled = board.collectionReady, onClick = { name = defaultBoardName(board.boards); creating = true }) { Text("Create board") }
-            TextButton(enabled = board.collectionReady && board.boards.isNotEmpty(), onClick = { opening = true }) { Text("Open board") }
-        }
-        Text(text = stringResource(R.string.floating_board_permission_explanation))
-        Text(text = stringResource(R.string.floating_board_full_screen_note))
-
-        if (overlayPermissionGranted) {
-            Text(text = stringResource(R.string.floating_board_permission_granted))
-            Button(onClick = onStartFloatingBoard, enabled = board.canEdit) {
-                Text(text = stringResource(R.string.start_floating_board))
-            }
-        } else {
-            Text(text = stringResource(R.string.floating_board_permission_denied))
-            Button(onClick = onOpenOverlaySettings) {
-                Text(text = stringResource(R.string.open_overlay_settings))
-            }
-        }
-
-        errorMessage?.let { message ->
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-
-        Button(onClick = onAddImages, enabled = board.canEdit) {
-            Text(if (board.importing) "Importing… Add images" else "Add images")
-        }
-        if (board.awaitingImportDestination) Text("Shared images are waiting. Create or open their destination board.")
-        if (board.canRetryImport) {
-            TextButton(enabled = !board.importing, onClick = board::retryImport) { Text("Retry failed images") }
-        }
-        board.message?.let { message ->
-            Row {
-                val color = if (message.startsWith("Board renamed to ")) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.error
-                Text(message, Modifier.weight(1f), color = color)
-                if (board.migrationFailed) {
-                    TextButton(onClick = board::retryMigration) { Text("Retry") }
-                } else {
-                    TextButton(onClick = { board.message = null }) { Text("Dismiss") }
-                }
-            }
-        }
-        if (board.canEdit) {
-            FullScreenCanvas(board = board, modifier = Modifier.weight(1f))
-        } else if (!board.migrationFailed) {
-            Text(if (board.collectionReady) "Create or open a board to continue." else "Opening board…")
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun FloatingBoardScreenPreview() {
-    EaslieTheme {
-        FloatingBoardScreen(
-            board = BoardStore(),
-            onAddImages = {},
-            overlayPermissionGranted = false,
-            errorMessage = null,
-            onOpenOverlaySettings = {},
-            onStartFloatingBoard = {}
-        )
     }
 }

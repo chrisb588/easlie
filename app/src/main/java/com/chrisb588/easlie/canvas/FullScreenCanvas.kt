@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,7 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
@@ -59,7 +61,11 @@ private data class Handle(val xSign: Float, val ySign: Float)
 private val corners = listOf(Handle(-1f, -1f), Handle(1f, -1f), Handle(1f, 1f), Handle(-1f, 1f))
 
 @Composable
-fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingMode: Boolean = false) {
+fun FullScreenCanvas(
+    board: BoardStore,
+    modifier: Modifier = Modifier,
+    floatingMode: Boolean = false,
+) {
     var selectedId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var menuId by remember(board.activeBoardId) { mutableStateOf<String?>(null) }
     var menuPosition by remember { mutableStateOf(Offset.Zero) }
@@ -84,10 +90,14 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
             }
         }
     }
-    val handleRadius = with(LocalDensity.current) { 12.dp.toPx() }
+    val resizeRadius = with(LocalDensity.current) { 8.dp.toPx() }
+    val rotationRadius = with(LocalDensity.current) { 12.dp.toPx() }
+    // Smaller visual handles keep their existing 48 dp diameter touch area.
+    val handleTouchRadius = with(LocalDensity.current) { 24.dp.toPx() }
     val rotationGap = with(LocalDensity.current) { 36.dp.toPx() }
     val backgroundColor = MaterialTheme.colorScheme.background
     val selectionColor = MaterialTheme.colorScheme.primary
+    val anchorContentColor = MaterialTheme.colorScheme.onPrimary
 
     Box(modifier.fillMaxSize()) {
         Canvas(
@@ -95,7 +105,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                 .onSizeChanged { canvasSize = CanvasSize(it.width.toFloat(), it.height.toFloat()) }
                 .testTag(if (floatingMode) CanvasTestTags.FloatingBoard else CanvasTestTags.FullScreenBoard)
                 .semantics { contentDescription = "Reference image board. Tap to select; drag a selected image or its handles. Double-tap for Delete." }
-                .pointerInput(board.activeBoardId, interactive, board, handleRadius, rotationGap, selectedId) {
+                .pointerInput(board.activeBoardId, interactive, board, handleTouchRadius, rotationGap, selectedId) {
                     if (!interactive) return@pointerInput
                     awaitEachGesture {
                         val down = awaitFirstDown()
@@ -119,13 +129,13 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                 nearest?.takeIf {
                                     val point = viewportAtStart.worldToWindow(item.corner(it.xSign, it.ySign), size)
                                     val distance = (point.toOffset() - down.position).getDistance()
-                                    distance <= handleRadius * 2f && distance < centerDistance
+                                    distance <= handleTouchRadius && distance < centerDistance
                                 }
                             }
                             val rotationHit = selected?.let {
                                 val point = viewportAtStart.worldToWindow(rotationHandle(it, rotationGap / viewportAtStart.zoom), size)
                                 val distance = (point.toOffset() - down.position).getDistance()
-                                distance <= handleRadius * 2f && distance < centerDistance
+                                distance <= handleTouchRadius && distance < centerDistance
                             } == true
                             val kind = when {
                                 handle != null -> DragKind.Resize
@@ -173,7 +183,7 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                                             val viewport = board.viewportFor(floatingMode)
                                             val onCorner = corners.any {
                                                 val point = viewport.worldToWindow(current.corner(it.xSign, it.ySign), size)
-                                                (point.toOffset() - second.position).getDistance() <= handleRadius * 2f
+                                                (point.toOffset() - second.position).getDistance() <= handleTouchRadius
                                             }
                                             val distance = (first.position - second.position).getDistance()
                                             if (onCorner && distance > 0f) {
@@ -270,21 +280,39 @@ fun FullScreenCanvas(board: BoardStore, modifier: Modifier = Modifier, floatingM
                 if (item.id == selectedId) {
                     for (corner in corners) {
                         val point = viewport.worldToWindow(item.corner(corner.xSign, corner.ySign), size).toOffset()
-                        drawCircle(Color.White, handleRadius, point)
-                        drawCircle(selectionColor, handleRadius, point, style = Stroke(2.dp.toPx()))
+                        drawCircle(selectionColor, resizeRadius, point)
+                        drawCircle(anchorContentColor, resizeRadius, point, style = Stroke(1.dp.toPx()))
                     }
                     val top = viewport.worldToWindow(item.localToWorld(CanvasPoint(0f, -item.height / 2f)), size).toOffset()
                     val rotation = viewport.worldToWindow(rotationHandle(item, rotationGap / viewport.zoom), size).toOffset()
                     drawLine(selectionColor, top, rotation, 2.dp.toPx())
-                    drawCircle(selectionColor, handleRadius, rotation)
+                    drawCircle(selectionColor, rotationRadius, rotation)
+                    translate(rotation.x, rotation.y) {
+                        val radius = 6.dp.toPx()
+                        drawArc(anchorContentColor, startAngle = 0f, sweepAngle = 270f, useCenter = false,
+                            topLeft = Offset(-radius, -radius), size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
+                            style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round))
+                        drawPath(Path().apply {
+                            moveTo(3.dp.toPx(), -radius)
+                            lineTo(-1.dp.toPx(), -radius - 3.dp.toPx())
+                            lineTo(-1.dp.toPx(), -radius + 3.dp.toPx())
+                            close()
+                        }, anchorContentColor)
+                    }
                 }
             }
         }
-        if (selectedId != null) {
-            TextButton(
-                onClick = { selectedId = null; menuId = null },
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).testTag(CanvasTestTags.Deselect),
-            ) { Text("Deselect image") }
+        if (interactive && board.items.any { it.id == selectedId }) {
+            val deselect = { selectedId = null; menuId = null; lastTapId = null }
+            if (floatingMode) {
+                TextButton(onClick = deselect,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).testTag(CanvasTestTags.Deselect),
+                ) { Text("Deselect image") }
+            } else {
+                FilledTonalButton(onClick = deselect,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp).testTag(CanvasTestTags.Deselect),
+                ) { Text("Deselect") }
+            }
         }
         Box(Modifier.offset { IntOffset(menuPosition.x.roundToInt(), menuPosition.y.roundToInt()) }.size(1.dp)) {
             DropdownMenu(expanded = menuId != null, onDismissRequest = { menuId = null }) {

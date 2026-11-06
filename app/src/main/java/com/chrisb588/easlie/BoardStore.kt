@@ -8,6 +8,7 @@ import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
@@ -35,6 +36,9 @@ class EaslieApplication : Application() {
     }
 }
 
+internal enum class BoardMessageKind { Success, Warning, Error, Recovery, BoardRecovery, Migration, Import }
+internal data class BoardFeedback(val id: Long, val text: String, val kind: BoardMessageKind)
+
 /** The active board and all destination-bound edits share one serialization mutex. */
 class BoardStore internal constructor(directory: File? = null, cacheBudget: Long = 16L * 1024 * 1024,
     profileImages: Boolean = false, collectionMigration: Boolean = false,
@@ -54,7 +58,18 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
         if (floatingMode) floating = value else fullScreen = value
     }
     var windowSize by mutableStateOf(CanvasSize(0f, 0f))
-    var message by mutableStateOf<String?>(null)
+    internal var loadGeneration by mutableLongStateOf(0L)
+        private set
+    private val messageSequence = java.util.concurrent.atomic.AtomicLong()
+    internal var feedback by mutableStateOf<BoardFeedback?>(null)
+        private set
+    var message: String?
+        get() = feedback?.text
+        set(value) { reportMessage(value) }
+
+    private fun reportMessage(text: String?, kind: BoardMessageKind = BoardMessageKind.Error) {
+        feedback = text?.let { BoardFeedback(messageSequence.getAndIncrement(), it, kind) }
+    }
     var importing by mutableStateOf(false)
         private set
     var migrationFailed by mutableStateOf(false)
@@ -131,17 +146,19 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
     }
 
     private suspend fun restoreStorage(reconcile: Boolean = false) {
+        loadGeneration++
+        if (feedback?.kind == BoardMessageKind.BoardRecovery || feedback?.kind == BoardMessageKind.Migration) message = null
         try {
             storage = withContext(Dispatchers.IO) {
                 if (collectionStorage != null) {
                     val directory = collectionStorage.initialize()
                     val cleanupError = collectionStorage.recoverDeletions()
-                    if (cleanupError != null) message = cleanupError
+                    if (cleanupError != null) reportMessage(cleanupError, BoardMessageKind.Recovery)
                     val collection = collectionStorage.readCollection()
                     boards = collection.boards
                     if (collection.activeBoardId != null && directory == null) {
                         val unavailable = "The previously active board cannot be accessed. Please create a new board or open an existing one."
-                        message = listOfNotNull(cleanupError, unavailable).joinToString(" ")
+                        reportMessage(listOfNotNull(cleanupError, unavailable).joinToString(" "), BoardMessageKind.BoardRecovery)
                     }
                     activeBoardId = collection.activeBoardId?.takeIf { id -> directory != null && collection.boards.any { it.id == id } }
                     directory?.let(::BoardStorage)
@@ -170,9 +187,9 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                 }
                 items = restoredItems
                 val skipped = restored.skipped + unreadable
-                if (skipped > 0) message = "$skipped item(s) could not be restored: " +
+                if (skipped > 0) reportMessage("$skipped item(s) could not be restored: " +
                     "${restored.missing} missing asset(s), ${restored.malformed} malformed item(s), " +
-                    "$unreadable unreadable image(s)."
+                    "$unreadable unreadable image(s).", BoardMessageKind.BoardRecovery)
                 reconciliationReferences = restored.referencedAssets
             }
             // Startup cleanup finishes under the switch lock before imports or edits can start.
@@ -187,15 +204,28 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
             if (collectionStorage != null) {
                 migrationFailed = true
                 ready = false
-                message = if (collectionStorage.hasCollection) {
+                reportMessage(if (collectionStorage.hasCollection) {
                     "We couldn't open your saved board. Tap Retry to try again."
                 } else {
                     "We couldn't prepare your board. Your original board is safe. Tap Retry to try again."
-                }
+                }, BoardMessageKind.Migration)
             } else {
-                message = "Board could not be loaded. Storage is read-only: ${failure.message}"
+                reportMessage("Board could not be loaded. Storage is read-only: ${failure.message}", BoardMessageKind.Recovery)
                 ready = true
             }
+        }
+    }
+
+    internal suspend fun preview(id: String): ImageBitmap? {
+        val collection = collectionStorage ?: return null
+        val activeItems = if (id == activeBoardId) items else null
+        return withContext(Dispatchers.IO) {
+            try {
+                val previewStorage = BoardStorage(collection.directoryFor(id))
+                renderBoardPreview(previewStorage, activeItems ?: previewStorage.load().snapshot.items)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) { null }
         }
     }
 
@@ -212,7 +242,7 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                     val updated = withContext(Dispatchers.IO) { collection.renameBoard(id, name) }
                     boards = updated.boards
                     val resolvedName = updated.boards.first { it.id == id }.name
-                    message = "Board renamed to $resolvedName."
+                    reportMessage("Board renamed to $resolvedName.", BoardMessageKind.Success)
                 } catch (failure: Exception) {
                     message = "Board could not be renamed: ${failure.message}"
                 }
@@ -262,7 +292,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                         floating = CanvasViewport()
                         reconciliationReferences = emptySet()
                     }
-                    message = deleted.cleanupError ?: if (cancelledImport) "The destination board was deleted. Import cannot continue or be retried." else null
+                    reportMessage(deleted.cleanupError ?: if (cancelledImport) "The destination board was deleted. Import cannot continue or be retried." else null,
+                        if (deleted.cleanupError != null) BoardMessageKind.Recovery else BoardMessageKind.Error)
                 } catch (failure: Exception) {
                     message = "Board could not be deleted: ${failure.message}"
                 }
@@ -538,7 +569,8 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                                 retryable.add(request.copy(uris = eligible.toList(), viewport = importViewport, size = importSize))
                             }
                             if (failures.isNotEmpty() && destinationRemains) {
-                                message = "${failures.size} image(s) could not be imported or saved. " + failures.joinToString("; ")
+                                reportMessage("${failures.size} image(s) could not be imported or saved. " + failures.joinToString("; "),
+                                    if (eligible.isNotEmpty()) BoardMessageKind.Import else BoardMessageKind.Warning)
                             }
                         }
                     } catch (cancelled: CancellationException) { throw cancelled }
@@ -547,8 +579,9 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
                         if (unprocessed.isNotEmpty() && (collectionStorage == null || boards.any { it.id == destination })) {
                             retryable.add(request.copy(uris = unprocessed.toList()))
                         }
-                        message = "Import destination could not be checked: ${failure.message}. " +
-                            unprocessed.joinToString { it.lastPathSegment ?: it.toString() }
+                        reportMessage("Import destination could not be checked: ${failure.message}. " +
+                            unprocessed.joinToString { it.lastPathSegment ?: it.toString() },
+                            if (retryable.isNotEmpty()) BoardMessageKind.Import else BoardMessageKind.Error)
                     } finally { canRetryImport = retryable.isNotEmpty() }
                 }
             } finally { importing = false }

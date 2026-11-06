@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.platform.app.InstrumentationRegistry
 import com.chrisb588.easlie.canvas.CanvasTestTags
@@ -51,16 +52,15 @@ class BoardStartupTest {
                 }
             }
             rule.onNodeWithText("Opening board…").assertIsDisplayed()
-            rule.onNodeWithText("Create board").assertIsNotEnabled()
-            rule.onNodeWithText("Add images").assertIsNotEnabled()
+            rule.onNodeWithContentDescription("Open board").assertIsNotEnabled()
+            rule.onNodeWithContentDescription("Add images").assertIsNotEnabled()
 
             finishCleanup.countDown()
             rule.waitUntil(5000) { board.collectionReady }
             rule.onNodeWithText("Opening board…").assertDoesNotExist()
             rule.onNodeWithText("Saved board").assertIsDisplayed()
-            rule.onNodeWithText("Create board").assertIsEnabled()
-            rule.onNodeWithText("Open board").assertIsEnabled()
-            rule.onNodeWithText("Add images").assertIsEnabled()
+            rule.onNodeWithContentDescription("Open board").assertIsEnabled()
+            rule.onNodeWithContentDescription("Add images").assertIsEnabled()
             rule.onNodeWithTag(CanvasTestTags.FullScreenBoard).assertIsDisplayed()
             rule.runOnIdle { assertEquals(collection.activeBoardId, board.activeBoardId) }
             org.junit.Assert.assertArrayEquals(indexBefore, File(root, "boards.index").readBytes())

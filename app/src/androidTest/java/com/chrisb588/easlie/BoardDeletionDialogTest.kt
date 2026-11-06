@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.chrisb588.easlie.canvas.BoardItem
@@ -48,7 +49,7 @@ class BoardDeletionDialogTest {
                     FloatingBoardScreen(store, {}, false, null, {}, {})
                 }
             }
-            rule.onNodeWithText("Open board").performClick()
+            rule.openBoardActions("Named references")
             rule.onNodeWithText("Delete").performClick()
             rule.onNodeWithText("Delete Named references?").assertIsDisplayed()
             rule.onNodeWithText("This board and its images will be removed from easlie.").assertIsDisplayed()
@@ -61,11 +62,11 @@ class BoardDeletionDialogTest {
                 assertEquals(floating, store.viewportFor(true))
             }
             assertTrue(File(root, "boards/$id/board.json").isFile)
-            rule.onNodeWithText("Open board").performClick()
+            rule.openBoardActions("Named references")
             rule.onNodeWithText("Delete").performClick()
             rule.onNodeWithText("Delete").performClick()
             rule.waitUntil(5000) { store.activeBoardId == null && store.boards.isEmpty() }
-            rule.onNodeWithText("Create board").assertIsDisplayed()
+            rule.onNodeWithContentDescription("Create board").assertIsDisplayed()
             rule.onNodeWithText("Create or open a board to continue.").assertIsDisplayed()
             assertFalse(File(root, "boards/$id").exists())
         } finally { resolver.delete(source, null, null); root.deleteRecursively() }
