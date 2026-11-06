@@ -84,11 +84,14 @@ class FloatingBoardLifecycleTest {
         var fixtureId: String? = null
         var previousBoards = emptyList<StoredBoard>()
         val full = CanvasViewport(CanvasPoint(100f, -30f), 2f)
+        var capturedOriginal = false
+        var primaryFailure: Throwable? = null
         try {
             await("Board not ready") { board.collectionReady && !board.importing && !FloatingBoardService.isServiceRunning }
             main {
                 previousId = board.activeBoardId
                 previousBoards = board.boards.toList()
+                capturedOriginal = true
                 board.createBoard("Floating lifecycle ${UUID.randomUUID()}")
             }
             await("Fixture not created") { board.collectionReady && board.activeBoardId != previousId }
@@ -138,7 +141,7 @@ class FloatingBoardLifecycleTest {
                     .resolveActivity(context.packageManager).packageName
                 await("Picker did not become focused (resolved $pickerPackage)") {
                     automation.windows.any { window -> window.isFocused && window.root?.packageName?.toString()?.let {
-                        it.contains("photopicker") || it.contains("providers.media") || it.contains("documentsui")
+                        it == pickerPackage || it.contains("photopicker") || it.contains("providers.media") || it.contains("documentsui")
                     } == true }
                 }
                 automation.waitForIdle(500, 5000)
@@ -154,6 +157,9 @@ class FloatingBoardLifecycleTest {
             main { context.startService(FloatingBoardService.startIntent(context).setAction(FloatingBoardService.ACTION_SHOW)) }
             SystemClock.sleep(200)
             await("Stale restore leaked a service") { !FloatingBoardService.isServiceRunning && !FloatingBoardService.isBoardAttached }
+        } catch (failure: Throwable) {
+            primaryFailure = failure
+            throw failure
         } finally {
             try {
                 main { context.stopService(FloatingBoardService.startIntent(context)) }
@@ -167,7 +173,13 @@ class FloatingBoardLifecycleTest {
                     main { board.deleteBoard(id) }
                     await("Fixture not deleted") { board.collectionReady && board.boards.none { it.id == id } }
                 }
-                main { assertEquals(previousId, board.activeBoardId); assertEquals(previousBoards, board.boards) }
+                if (capturedOriginal) main {
+                    assertEquals(previousId, board.activeBoardId)
+                    assertEquals(previousBoards, board.boards)
+                }
+            } catch (cleanupFailure: Throwable) {
+                if (primaryFailure == null) throw cleanupFailure
+                primaryFailure.addSuppressed(cleanupFailure)
             } finally {
                 main {
                     val monitor = ActivityLifecycleMonitorRegistry.getInstance()
