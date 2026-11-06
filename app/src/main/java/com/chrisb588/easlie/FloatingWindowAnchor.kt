@@ -29,19 +29,19 @@ internal class FloatingWindowAnchor(context: Context, private val kind: Kind) : 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         path.reset()
         if (kind == Kind.DRAG) {
-            path.moveTo(dp(12), h / 2f)
-            path.lineTo(w - dp(12), h / 2f)
+            path.moveTo(dp(12), dp(8))
+            path.lineTo(w - dp(12), dp(8))
         } else {
             val left = kind == Kind.RESIZE_LEFT
             val centerX = if (left) dp(32) else w - dp(32)
             val centerY = h - dp(32)
             val radius = dp(24) // Follow the window's 32dp corner, inset by 8dp.
             val edgeX = if (left) dp(8) else w - dp(8)
-            path.moveTo(edgeX, dp(12))
+            path.moveTo(edgeX, centerY - dp(4))
             path.lineTo(edgeX, centerY)
             path.arcTo(centerX - radius, centerY - radius, centerX + radius, centerY + radius,
                 if (left) 180f else 0f, if (left) -90f else 90f, false)
-            path.lineTo(if (left) w - dp(12) else dp(12), h - dp(8))
+            path.lineTo(if (left) centerX + dp(4) else centerX - dp(4), h - dp(8))
         }
     }
 

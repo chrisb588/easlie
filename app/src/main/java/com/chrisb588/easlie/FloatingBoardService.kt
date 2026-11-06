@@ -311,7 +311,7 @@ class FloatingBoardService : Service() {
             contentDescription = getString(R.string.floating_board_move_label)
         }
         handles.add(moveHandle)
-        root.addView(moveHandle, FrameLayout.LayoutParams(dp(200), dp(48), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+        root.addView(moveHandle, FrameLayout.LayoutParams(dp(200), dp(40), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
         addMoveListener(moveHandle)
         for (fromLeft in listOf(true, false)) {
             val resizeHandle = FloatingWindowAnchor(context,

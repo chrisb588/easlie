@@ -146,7 +146,7 @@ class FloatingBoardLifecycleTest {
                 assertTrue(before.width() > 0)
                 val move = node("Move floating board")!!
                 val bounds = Rect().also(move::getBoundsInScreen)
-                assertTrue(bounds.height() >= (48 * context.resources.displayMetrics.density).toInt())
+                assertEquals((40 * context.resources.displayMetrics.density).toInt(), bounds.height())
                 assertEquals((200 * density).toInt(), bounds.width())
                 assertEquals((64 * density).toInt(), bounds("Resize floating board").height())
                 if (it == 0) {
