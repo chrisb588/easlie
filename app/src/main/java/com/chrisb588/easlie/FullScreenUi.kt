@@ -67,9 +67,7 @@ internal fun FloatingBoardScreen(
     var permission by rememberSaveable { mutableStateOf(false) }
     val libraryTitleStyle = MaterialTheme.typography.titleLarge.let { it.copy(fontSize = (it.fontSize.value - 1).sp) }
     val createIconSize = with(LocalDensity.current) { libraryTitleStyle.fontSize.toDp() }
-    val newBoardIconSize = with(LocalDensity.current) { MaterialTheme.typography.bodyLarge.fontSize.toDp() }
     val mainMenu = home || board.activeBoardId == null
-    val active = board.boards.firstOrNull { it.id == board.activeBoardId }
     val create = { name = defaultBoardName(board.boards); creating = true; boardMenu = false }
     val open: (StoredBoard) -> Unit = { entry ->
         board.openBoard(entry.id)
@@ -127,29 +125,8 @@ internal fun FloatingBoardScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 RoundControl(UiIcon.Home, "Home", onClick = { home = true; board.save() })
-                BoxWithConstraints(Modifier.weight(1f, fill = false).width(256.dp)) {
-                    val selectorWidth = maxWidth
-                    Surface(modifier = Modifier.fillMaxWidth(), shape = CircleShape, enabled = board.collectionReady, color = MaterialTheme.colorScheme.surfaceContainer, onClick = { boardMenu = true }) {
-                        Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 16.dp)
-                            .semantics { contentDescription = "Open board" }, verticalAlignment = Alignment.CenterVertically) {
-                            Text(active?.name ?: "Open a board", Modifier.weight(1f), maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontStyle = if (active == null) FontStyle.Italic else FontStyle.Normal)
-                            Icon(UiIcon.Down.vector, null, Modifier.padding(start = 8.dp).size(20.dp))
-                        }
-                    }
-                    DropdownMenu(boardMenu, { boardMenu = false }, shape = menuCorners, offset = DpOffset(0.dp, 8.dp),
-                        modifier = Modifier.width(selectorWidth).heightIn(max = 360.dp)) {
-                        board.boards.forEach { entry ->
-                            DropdownMenuItem(text = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                enabled = board.collectionReady, onClick = { open(entry) })
-                        }
-                        HorizontalDivider()
-                        DropdownMenuItem(text = { Text("New board") },
-                            trailingIcon = { Icon(UiIcon.Add.vector, null, Modifier.size(newBoardIconSize)) },
-                            enabled = board.collectionReady, onClick = create)
-                    }
-                }
+                BoardSelector(board, boardMenu, { boardMenu = it }, { open(it) }, create,
+                    Modifier.weight(1f, fill = false).width(256.dp))
             }
         }
         Column(Modifier.align(Alignment.TopEnd).padding(controlsInset), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -262,7 +239,7 @@ private fun BoardLibraryRow(board: BoardStore, entry: StoredBoard, enabled: Bool
 }
 
 @Composable
-private fun RoundControl(icon: UiIcon, label: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun RoundControl(icon: UiIcon, label: String, enabled: Boolean = true, onClick: () -> Unit) {
     FilledTonalIconButton(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = Modifier.size(56.dp)) {
         Icon(icon.vector, label, Modifier.size(24.dp))
     }
@@ -271,7 +248,7 @@ private fun RoundControl(icon: UiIcon, label: String, enabled: Boolean = true, o
 private data class Notice(val feedback: BoardFeedback, val boardId: String?, val loadGeneration: Long)
 
 @Composable
-private fun NoticeStack(board: BoardStore, error: String?, modifier: Modifier = Modifier) {
+internal fun NoticeStack(board: BoardStore, error: String?, modifier: Modifier = Modifier) {
     val notices = remember { mutableStateListOf<Notice>() }
     var externalId by remember { mutableLongStateOf(-1) }
     LaunchedEffect(board.activeBoardId, board.loadGeneration, board.migrationFailed, board.canRetryImport) {
@@ -361,7 +338,7 @@ private fun NoticeSurface(text: String, icon: UiIcon, actions: @Composable RowSc
     }
 }
 
-private enum class UiIcon(val path: String) {
+internal enum class UiIcon(val path: String) {
     Home("M3,10 L12,3 L21,10 L21,21 L15,21 L15,14 L9,14 L9,21 L3,21 Z"),
     Menu("M3,5 L21,5 L21,7 L3,7 Z M3,11 L21,11 L21,13 L3,13 Z M3,17 L21,17 L21,19 L3,19 Z"),
     Add("M11,3 L13,3 L13,11 L21,11 L21,13 L13,13 L13,21 L11,21 L11,13 L3,13 L3,11 L11,11 Z"),
@@ -371,11 +348,43 @@ private enum class UiIcon(val path: String) {
     Warning("M12,2 L23,22 L1,22 Z M11,8 L11,15 L13,15 L13,8 Z M11,17 L11,19 L13,19 L13,17 Z"),
     Error("M12,1 A11,11 0,1 0,12 23 A11,11 0,1 0,12 1 Z M11,6 L11,14 L13,14 L13,6 Z M11,17 L11,19 L13,19 L13,17 Z"),
     Retry("M20,4 L20,10 L14,10 L16.5,7.5 A6,6 0,1 0,18,14 L20,14 A8,8 0,1 1,18,6 Z"),
+    Fullscreen("M3,3 L9,3 L9,5 L5,5 L5,9 L3,9 Z M15,3 L21,3 L21,9 L19,9 L19,5 L15,5 Z M3,15 L5,15 L5,19 L9,19 L9,21 L3,21 Z M19,15 L21,15 L21,21 L15,21 L15,19 L19,19 Z"),
     Close("M5,4 L12,11 L19,4 L20,5 L13,12 L20,19 L19,20 L12,13 L5,20 L4,19 L11,12 L4,5 Z");
 
     val vector: ImageVector by lazy {
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
             .addPath(PathParser().parsePathString(path).toNodes(), fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black),
                 pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd).build()
+    }
+}
+
+@Composable
+internal fun BoardSelector(board: BoardStore, expanded: Boolean, onExpandedChange: (Boolean) -> Unit,
+    onOpen: (StoredBoard) -> Unit, onCreate: () -> Unit, modifier: Modifier = Modifier) {
+    val active = board.boards.firstOrNull { it.id == board.activeBoardId }
+    val newBoardIconSize = with(LocalDensity.current) { MaterialTheme.typography.bodyLarge.fontSize.toDp() }
+    BoxWithConstraints(modifier) {
+        val selectorWidth = maxWidth
+        Surface(modifier = Modifier.fillMaxWidth(), shape = CircleShape, enabled = board.collectionReady,
+            color = MaterialTheme.colorScheme.surfaceContainer, onClick = { onExpandedChange(true) }) {
+            Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 16.dp)
+                .semantics { contentDescription = "Open board" }, verticalAlignment = Alignment.CenterVertically) {
+                Text(active?.name ?: "Open a board", Modifier.weight(1f), maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontStyle = if (active == null) FontStyle.Italic else FontStyle.Normal)
+                Icon(UiIcon.Down.vector, null, Modifier.padding(start = 8.dp).size(20.dp))
+            }
+        }
+        DropdownMenu(expanded, { onExpandedChange(false) }, shape = menuCorners, offset = DpOffset(0.dp, 8.dp),
+            modifier = Modifier.width(selectorWidth).heightIn(max = 360.dp)) {
+            board.boards.forEach { entry ->
+                DropdownMenuItem(text = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    enabled = board.collectionReady, onClick = { onOpen(entry) })
+            }
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text("New board") },
+                trailingIcon = { Icon(UiIcon.Add.vector, null, Modifier.size(newBoardIconSize)) },
+                enabled = board.collectionReady, onClick = onCreate)
+        }
     }
 }

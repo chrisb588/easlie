@@ -4,6 +4,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class FloatingBoardGeometryTest {
+    @org.junit.Test fun roundedCornersRejectInvisibleInputAndKeepVisibleEdges() {
+        fun contains(x: Float, y: Float) = FloatingBoardGeometry.containsRoundedPoint(x, y, 280, 248, 32)
+        org.junit.Assert.assertFalse(contains(0f, 0f))
+        org.junit.Assert.assertFalse(contains(279f, 0f))
+        org.junit.Assert.assertFalse(contains(0f, 247f))
+        org.junit.Assert.assertFalse(contains(279f, 247f))
+        org.junit.Assert.assertTrue(contains(16f, 16f))
+        org.junit.Assert.assertTrue(contains(140f, 0f))
+        org.junit.Assert.assertTrue(contains(0f, 124f))
+        org.junit.Assert.assertFalse(contains(-1f, 124f))
+        org.junit.Assert.assertFalse(contains(280f, 124f))
+    }
+
     @Test
     fun leftResizeKeepsTheRightEdgeFixed() {
         val resized = FloatingBoardGeometry.resizedFromLeft(

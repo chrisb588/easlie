@@ -428,9 +428,9 @@ class BoardStore internal constructor(directory: File? = null, cacheBudget: Long
 
     internal fun logImageProfile() { renderer.logProfile() }
 
-    fun enqueueImport(resolver: ContentResolver, uris: List<Uri>) {
+    fun enqueueImport(resolver: ContentResolver, uris: List<Uri>, floatingMode: Boolean = false) {
         if (uris.isEmpty()) return
-        pending.addLast(PendingImport(resolver, uris, activeBoardId, if (canEdit) viewport else null, windowSize))
+        pending.addLast(PendingImport(resolver, uris, activeBoardId, if (canEdit) viewportFor(floatingMode) else null, windowSize))
         startPendingImports()
     }
 

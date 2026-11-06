@@ -36,6 +36,12 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".FloatingBoardActionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Easlie.FloatingAction"
+            android:windowSoftInputMode="adjustResize" />
         <service
             android:name=".FloatingBoardService"
             android:exported="false"
