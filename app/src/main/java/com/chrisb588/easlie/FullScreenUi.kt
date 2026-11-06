@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -84,7 +85,7 @@ internal fun FloatingBoardScreen(
     BackHandler(enabled = !mainMenu) { home = true; board.save() }
 
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        val controlsInset = if (mainMenu) 16.dp else 24.dp
+        val controlsInset = 24.dp
         val actionsMenuMaxWidth = (maxWidth - controlsInset * 2 - 64.dp).coerceAtLeast(112.dp)
         if (!mainMenu && board.canEdit) {
             FullScreenCanvas(board)
@@ -123,13 +124,13 @@ internal fun FloatingBoardScreen(
             Row(
                 Modifier.align(Alignment.TopStart).fillMaxWidth().padding(controlsInset).padding(end = 68.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 RoundControl(UiIcon.Home, "Home", onClick = { home = true; board.save() })
                 BoxWithConstraints(Modifier.weight(1f, fill = false).width(256.dp)) {
                     val selectorWidth = maxWidth
                     Surface(modifier = Modifier.fillMaxWidth(), shape = CircleShape, enabled = board.collectionReady, color = MaterialTheme.colorScheme.surfaceContainer, onClick = { boardMenu = true }) {
-                        Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 16.dp)
+                        Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 16.dp)
                             .semantics { contentDescription = "Open board" }, verticalAlignment = Alignment.CenterVertically) {
                             Text(active?.name ?: "Open a board", Modifier.weight(1f), maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -137,7 +138,7 @@ internal fun FloatingBoardScreen(
                             Icon(UiIcon.Down.vector, null, Modifier.padding(start = 8.dp).size(20.dp))
                         }
                     }
-                    DropdownMenu(boardMenu, { boardMenu = false }, shape = menuCorners,
+                    DropdownMenu(boardMenu, { boardMenu = false }, shape = menuCorners, offset = DpOffset(0.dp, 8.dp),
                         modifier = Modifier.width(selectorWidth).heightIn(max = 360.dp)) {
                         board.boards.forEach { entry ->
                             DropdownMenuItem(text = { Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },

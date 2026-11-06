@@ -36,4 +36,4 @@ val Typography = Typography(
 )
 
 internal val cardHeaderStyle: TextStyle
-    @Composable get() = MaterialTheme.typography.headlineSmall.let { it.copy(fontSize = (it.fontSize.value - 2).sp) }
+    @Composable get() = MaterialTheme.typography.headlineSmall.let { it.copy(fontSize = (it.fontSize.value - 4).sp) }
