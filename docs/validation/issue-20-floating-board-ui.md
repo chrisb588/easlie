@@ -36,7 +36,7 @@ Independent acceptance and standards/spec reviews found a notice/control overlap
 
 ## Lead smoke-test evidence
 
-Pending. Design approval above is not task-assessment evidence. The lead still needs to assess selecting/deselecting, opening another board, entering floating mode, moving/resizing the window, manipulating the canvas without activating controls, the Return/Close layout, and readable selection feedback in both tablet orientations. Automated results are reported separately and do not mark these lead-owned checks complete.
+At initial review, this assessment was pending. The final lead-reported assessment is recorded separately below. Design approval above and automated results are not substitutes for that assessment.
 
 ## Lead-requested anchor and visibility refinements — 2026-11-06
 
@@ -81,3 +81,21 @@ Debug app and instrumentation builds, all 55 JVM tests, lint (zero errors, 13 wa
 The lead requested restoring the previous hiding behavior after noting that the translucent overlay remains above the New board form and image picker. This supersedes the transparency behavior described in the preceding section. The action activity again hides the existing overlay while either action is open, then restores it on completion or cancellation. The service, action activity and lifecycle regression return to their pre-transparency implementation. Resize-marker border removal, its raster regression and the corrected appearance assertion remain in place. This scoped revert is recorded in its own commit.
 
 Debug app and instrumentation builds, all 55 JVM tests, lint (zero errors, 13 warnings and one hint), and diff checks passed. The three focused tablet checks passed: FloatingBoardLifecycleTest, AppearanceHostTest and FloatingBoardRedesignTest#resizeMarksHaveNoBorder. They verify hiding/restoration and lifecycle cleanup, live host theme updates, and preservation of border-free resize marks. Test fixtures restored the original board/list and appearance settings. Notification permission was preserved, test APK and device screenshots were removed, and no app service remained afterward.
+
+## Final automated evidence for AC8 — 2026-11-06
+
+The final combined tablet batch ran against the application and test code at `e4ff154` and passed `OK (40 tests)` on SM-X616B. The subsequent evidence update changes only this document. All 55 JVM tests passed, debug app and instrumentation builds passed, lint reported zero errors (13 warnings and one hint), and `git diff --check` passed.
+
+Input boundaries and functional interaction are covered by FloatingBoardLifecycleTest, all six FloatingBoardRedesignTest cases, FullScreenRedesignTest, CanvasHostInputTest, CanvasGestureOwnershipTest, CanvasResizeContinuationTest and CanvasInterruptionTest. Together they exercise separate native move/resize targets, canvas pan/pinch over images, selected-image transforms, both resizing gestures, explicit deselection with an oversized image, interruption recovery, action cancellation/restoration and inactivity behavior. AppearanceHostTest verifies immediate light/dark/system theme updates through both real hosts and board switches. These are functional checks, not profiling or benchmarks.
+
+Permission handling is covered by FullScreenRedesignTest#deniedOverlayShowsContextualGuidanceAndCancelLeavesCanvasUsable: injected denied permission shows guidance, cancellation leaves Add images usable without starting floating mode, and Open overlay settings invokes the settings callback. This is a UI regression with injected permission state, not an actual system permission-revocation test.
+
+Resource cleanup is covered by both ImageRendererTest#clearingSeveralQueuedDecodesDoesNotModifyTheCancellationIteration and ImageRendererTest#sharperDecodeRetainsPreviewAndLeavingViewportReleasesImages, plus BoardRenderingPersistenceTest#outgoingHostCannotClearOrResizeTheActiveFloatingRenderer. These verify queued-decode cancellation, release of offscreen rendered images and preservation of the renderer owned by the current host. The real-window lifecycle case checks duplicate-start protection and removal of the window, service and notification after Return/Close. Native-host tests restore and assert the original board/list and viewports. The notification setting was preserved; the test APK and generated screenshots were removed; the final service inspection reported no app service.
+
+AC8's automated evidence is recorded here separately from the lead-reported smoke assessment below. Earlier batches and their limits remain historical records above.
+
+## Final lead-reported assessment — 2026-11-06
+
+Before requesting verification of the final evidence-recording AC, the lead marked ACs 1–7 complete in issue #20. This includes the approved design, window/canvas controls and gestures, accessibility and orientation/readability assessment, Return/Close preservation and cleanup, repeated transitions and appearance updates, and the specified user-task assessment in AC7. These checked criteria are the lead's reported assessment. They are recorded separately from the agent-run regressions; no additional task-by-task observations or lead screenshots were supplied.
+
+The lead then authorized merging after the final AC is verified. The agent is verifying the automated evidence and its separation from this lead-reported assessment, rather than performing or claiming the lead's smoke tests.
