@@ -1,5 +1,8 @@
 package com.chrisb588.easlie
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
@@ -16,23 +19,30 @@ import com.chrisb588.easlie.canvas.FullScreenCanvas
 /** Window handles sit above this host; its canvas keeps a single drawing/input coordinate space. */
 @Composable
 internal fun FloatingBoardUi(board: BoardStore, onReturn: () -> Unit, onClose: () -> Unit,
-    onAddImages: () -> Unit, onCreateBoard: () -> Unit, modifier: Modifier = Modifier) {
+    onAddImages: () -> Unit, onCreateBoard: () -> Unit, modifier: Modifier = Modifier,
+    controlsVisible: Boolean = true, onBoardMenuVisibilityChanged: (Boolean) -> Unit = {}) {
     var boardMenu by remember { mutableStateOf(false) }
+    LaunchedEffect(boardMenu) { onBoardMenuVisibilityChanged(boardMenu) }
+    DisposableEffect(Unit) { onDispose { onBoardMenuVisibilityChanged(false) } }
     BoxWithConstraints(modifier.fillMaxSize().clip(RoundedCornerShape(32.dp))
         .background(MaterialTheme.colorScheme.background).testTag("floating-host")) {
         if (board.canEdit) FullScreenCanvas(board, floatingMode = true)
-        Row(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) {
-                BoardSelector(board, boardMenu, { boardMenu = it }, {
-                    board.openBoard(it.id)
-                    boardMenu = false
-                }, { boardMenu = false; onCreateBoard() }, Modifier.widthIn(max = 256.dp).fillMaxWidth())
+        AnimatedVisibility(controlsVisible, enter = fadeIn(), exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopStart)) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 48.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) {
+                    BoardSelector(board, boardMenu, { boardMenu = it }, {
+                        board.openBoard(it.id)
+                        boardMenu = false
+                    }, { boardMenu = false; onCreateBoard() }, Modifier.widthIn(max = 256.dp).fillMaxWidth())
+                }
+                RoundControl(UiIcon.Fullscreen, stringResource(R.string.floating_board_return_label), onClick = onReturn)
+                RoundControl(UiIcon.Close, stringResource(R.string.floating_board_close_label), onClick = onClose)
             }
-            RoundControl(UiIcon.Fullscreen, stringResource(R.string.floating_board_return_label), onClick = onReturn)
-            RoundControl(UiIcon.Close, stringResource(R.string.floating_board_close_label), onClick = onClose)
         }
-        Box(Modifier.align(Alignment.TopEnd).padding(top = 112.dp, end = 16.dp)) {
+        AnimatedVisibility(controlsVisible, enter = fadeIn(), exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 112.dp, end = 16.dp)) {
             RoundControl(UiIcon.Add, "Add images", board.canEdit, onAddImages)
         }
         // Leave the corner resize targets and centered Deselect action clear.

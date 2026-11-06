@@ -4,7 +4,10 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.NotificationManager
 import android.content.Intent
 import android.graphics.Rect
+import android.graphics.Bitmap
+import java.io.File
 import android.os.SystemClock
+import android.os.Build
 import android.provider.Settings
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -40,8 +43,18 @@ class FloatingBoardLifecycleTest {
         repeat(node.childCount) { find(node.getChild(it), label)?.let { found -> return found } }
         return null
     }
-    private fun node(label: String) = automation.windows.firstNotNullOfOrNull { find(it.root, label) }
+    private fun node(label: String): AccessibilityNodeInfo? {
+        if (Build.VERSION.SDK_INT >= 34) automation.clearCache()
+        val roots = automation.windows.mapNotNull { it.root }
+        if (FloatingBoardService.isBoardAttached && label in setOf(
+                "Open board", "Return to full-screen mode", "Close floating board", "Add images")) {
+            // Hidden overlay controls must not match the fullscreen host beneath this fixture.
+            return roots.firstOrNull { find(it, "Floating reference board") != null }?.let { find(it, label) }
+        }
+        return roots.firstNotNullOfOrNull { find(it, label) }
+    }
     private fun click(label: String) {
+        if (node(label) == null) node("Move floating board")?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         await("Control unavailable: $label") { node(label) != null }
         var control = node(label)!!
         while (!control.isClickable && control.parent != null) control = control.parent
@@ -56,6 +69,13 @@ class FloatingBoardLifecycleTest {
         }
     }
     private fun bounds(label: String): Rect = Rect().also { node(label)!!.getBoundsInScreen(it) }
+    private fun touch(action: Int, bounds: Rect, start: Long) {
+        val event = MotionEvent.obtain(start, SystemClock.uptimeMillis(), action,
+            bounds.exactCenterX(), bounds.exactCenterY(), 0)
+        event.source = InputDevice.SOURCE_TOUCHSCREEN
+        automation.injectInputEvent(event, true)
+        event.recycle()
+    }
     private fun drag(bounds: Rect, dx: Float, dy: Float) {
         val start = SystemClock.uptimeMillis()
         fun send(action: Int, fraction: Float) {
@@ -127,7 +147,41 @@ class FloatingBoardLifecycleTest {
                 val move = node("Move floating board")!!
                 val bounds = Rect().also(move::getBoundsInScreen)
                 assertTrue(bounds.height() >= (48 * context.resources.displayMetrics.density).toInt())
+                assertEquals((200 * density).toInt(), bounds.width())
+                assertEquals((64 * density).toInt(), bounds("Resize floating board").height())
+                if (it == 0) {
+                    SystemClock.sleep(4800)
+                    // Only the disposable empty fixture is captured for anchor visual QA.
+                    main { assertTrue(board.items.isEmpty()); assertEquals(fixtureId, board.activeBoardId) }
+                    val overlay = bounds("Floating reference board")
+                    automation.takeScreenshot()?.let { screen ->
+                        val crop = Bitmap.createBitmap(screen, overlay.left, overlay.top, overlay.width(), overlay.height())
+                        File(context.cacheDir, "floating-anchors-review.png").outputStream().use { output ->
+                            crop.compress(Bitmap.CompressFormat.PNG, 100, output)
+                        }
+                        crop.recycle(); screen.recycle()
+                    }
+                    listOf("Open board", "Return to full-screen mode", "Close floating board", "Add images").forEach { label ->
+                        assertNull("Chrome did not hide: $label", node(label))
+                    }
+                    assertNotNull(node("Move floating board"))
+                    assertNotNull(node("Resize floating board"))
+                    assertNotNull(node("Resize floating board from bottom left"))
+                    val start = SystemClock.uptimeMillis()
+                    touch(MotionEvent.ACTION_DOWN, overlay, start)
+                    touch(MotionEvent.ACTION_UP, overlay, start)
+                    await("Canvas touch did not reveal chrome") { node("Close floating board") != null }
+                    val holdStart = SystemClock.uptimeMillis()
+                    touch(MotionEvent.ACTION_DOWN, overlay, holdStart)
+                    SystemClock.sleep(4300)
+                    assertNotNull("Controls hid during a held touch", node("Close floating board"))
+                    touch(MotionEvent.ACTION_UP, overlay, holdStart)
+                }
                 click("Open board")
+                if (it == 0) {
+                    SystemClock.sleep(4300)
+                    assertNotNull("Menu hid during board selection", node("New board"))
+                }
                 click("New board")
                 await("Creation form did not open") { node("Cancel") != null }
                 assertNull(node("Close floating board"))

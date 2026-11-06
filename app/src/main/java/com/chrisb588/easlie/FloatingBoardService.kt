@@ -12,7 +12,6 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.PixelFormat
-import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
 import android.os.Build
@@ -30,8 +29,8 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityEvent
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
@@ -48,7 +47,9 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.chrisb588.easlie.ui.theme.EaslieTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.toArgb
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -62,6 +63,24 @@ class FloatingBoardService : Service() {
     private var composeOwner: OverlayComposeOwner? = null
     private val controlsHandler = Handler(Looper.getMainLooper())
     private var returnAfterStop = false
+    private var controlsVisible by mutableStateOf(true)
+    private var controlsHeld = false
+    private var boardMenuOpen = false
+    private var accessibilityFocusInside = false
+    private val hideControls = Runnable { controlsVisible = false }
+
+    private fun showControls() {
+        controlsVisible = true
+        scheduleControlsHide()
+    }
+
+    private fun scheduleControlsHide() {
+        controlsHandler.removeCallbacks(hideControls)
+        if (!controlsHeld && !boardMenuOpen && !accessibilityFocusInside &&
+            boardView?.isAttachedToWindow == true && boardView?.visibility == View.VISIBLE) {
+            controlsHandler.postDelayed(hideControls, 4000L)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -73,12 +92,16 @@ class FloatingBoardService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return when (intent?.action) {
             ACTION_HIDE -> {
+                controlsHandler.removeCallbacks(hideControls)
                 if (boardView == null) stopSelf() else boardView?.visibility = View.GONE
                 START_NOT_STICKY
             }
 
             ACTION_SHOW -> {
-                if (boardView == null) stopSelf() else boardView?.visibility = View.VISIBLE
+                if (boardView == null) stopSelf() else {
+                    boardView?.visibility = View.VISIBLE
+                    showControls()
+                }
                 START_NOT_STICKY
             }
 
@@ -201,6 +224,7 @@ class FloatingBoardService : Service() {
             layoutParams = params
             boardView = view
             isBoardAttached = true
+            showControls()
             return true
         } catch (exception: RuntimeException) {
             Log.e(TAG, "Unable to attach floating board", exception)
@@ -238,7 +262,19 @@ class FloatingBoardService : Service() {
             override fun dispatchTouchEvent(event: MotionEvent): Boolean {
                 if (event.actionMasked == MotionEvent.ACTION_DOWN &&
                     !FloatingBoardGeometry.containsRoundedPoint(event.x, event.y, width, height, dp(32))) return false
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { controlsHeld = true; showControls() }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { controlsHeld = false; showControls() }
+                }
                 return super.dispatchTouchEvent(event)
+            }
+
+            override fun requestSendAccessibilityEvent(child: View, event: AccessibilityEvent): Boolean {
+                when (event.eventType) {
+                    AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED -> { accessibilityFocusInside = true; showControls() }
+                    AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED -> { accessibilityFocusInside = false; scheduleControlsHide() }
+                }
+                return super.requestSendAccessibilityEvent(child, event)
             }
         }.apply {
             contentDescription = getString(R.string.floating_board_overlay_label)
@@ -250,7 +286,7 @@ class FloatingBoardService : Service() {
         root.setViewTreeViewModelStoreOwner(owner)
         root.setViewTreeSavedStateRegistryOwner(owner)
         composeOwner = owner
-        val handles = mutableListOf<TextView>()
+        val handles = mutableListOf<FloatingWindowAnchor>()
         root.addView(ComposeView(context).apply {
             setContent {
                 val store = (application as EaslieApplication).board
@@ -261,39 +297,29 @@ class FloatingBoardService : Service() {
                     val colors = MaterialTheme.colorScheme
                     SideEffect {
                         (root.background as GradientDrawable).setColor(colors.background.toArgb())
-                        handles.forEachIndexed { index, handle ->
-                            handle.setTextColor(colors.onSurfaceVariant.toArgb())
-                            val inset = dp(if (index == 0) 12 else 4)
-                            handle.background = InsetDrawable(GradientDrawable().apply {
-                                setColor(colors.surfaceContainerHigh.toArgb())
-                                cornerRadius = dp(24).toFloat()
-                            }, dp(4), inset, dp(4), inset)
-                        }
+                        handles.forEach { it.setColors(colors.onSurfaceVariant.toArgb(), colors.surface.toArgb()) }
                     }
                     FloatingBoardUi(store, ::returnToFullScreen, ::stopAndCleanUp,
                         { openBoardAction(FloatingBoardActionActivity.ADD_IMAGES) },
-                        { openBoardAction(FloatingBoardActionActivity.CREATE_BOARD) })
+                        { openBoardAction(FloatingBoardActionActivity.CREATE_BOARD) },
+                        controlsVisible = controlsVisible,
+                        onBoardMenuVisibilityChanged = { boardMenuOpen = it; showControls() })
                 }
             }
         }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        val moveHandle = TextView(context).apply {
-            text = "━━━━"
-            textSize = 18f
-            gravity = Gravity.CENTER
+        val moveHandle = FloatingWindowAnchor(context, FloatingWindowAnchor.Kind.DRAG).apply {
             contentDescription = getString(R.string.floating_board_move_label)
         }
         handles.add(moveHandle)
-        root.addView(moveHandle, FrameLayout.LayoutParams(dp(128), dp(48), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+        root.addView(moveHandle, FrameLayout.LayoutParams(dp(200), dp(48), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
         addMoveListener(moveHandle)
         for (fromLeft in listOf(true, false)) {
-            val resizeHandle = TextView(context).apply {
-                text = if (fromLeft) "⌞" else "⌟"
-                textSize = 28f
-                gravity = Gravity.CENTER
+            val resizeHandle = FloatingWindowAnchor(context,
+                if (fromLeft) FloatingWindowAnchor.Kind.RESIZE_LEFT else FloatingWindowAnchor.Kind.RESIZE_RIGHT).apply {
                 contentDescription = getString(if (fromLeft) R.string.floating_board_resize_left_label else R.string.floating_board_resize_label)
             }
             handles.add(resizeHandle)
-            root.addView(resizeHandle, FrameLayout.LayoutParams(dp(48), dp(48),
+            root.addView(resizeHandle, FrameLayout.LayoutParams(dp(64), dp(64),
                 Gravity.BOTTOM or if (fromLeft) Gravity.LEFT else Gravity.RIGHT))
             addResizeListener(resizeHandle, fromLeft)
         }
@@ -328,7 +354,7 @@ class FloatingBoardService : Service() {
 
         val touchSlop = ViewConfiguration.get(handle.context).scaledTouchSlop
         var dragged = false
-        handle.setOnClickListener { }
+        handle.setOnClickListener { showControls() }
         handle.setOnTouchListener { view, event ->
             val params = layoutParams ?: return@setOnTouchListener false
             when (event.actionMasked) {
@@ -374,7 +400,7 @@ class FloatingBoardService : Service() {
 
         val touchSlop = ViewConfiguration.get(handle.context).scaledTouchSlop
         var dragged = false
-        handle.setOnClickListener { }
+        handle.setOnClickListener { showControls() }
         handle.setOnTouchListener { view, event ->
             val params = layoutParams ?: return@setOnTouchListener false
             when (event.actionMasked) {
@@ -513,6 +539,10 @@ class FloatingBoardService : Service() {
     }
 
     private fun removeBoardWindow() {
+        controlsHandler.removeCallbacks(hideControls)
+        controlsHeld = false
+        boardMenuOpen = false
+        accessibilityFocusInside = false
         val view = boardView ?: return
         try {
             windowManager?.removeViewImmediate(view)

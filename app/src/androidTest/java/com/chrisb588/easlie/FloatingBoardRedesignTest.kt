@@ -30,6 +30,7 @@ class FloatingBoardRedesignTest {
     private var closed = 0
     private var imports = 0
     private var creates = 0
+    private val controlsVisible = mutableStateOf(true)
     private val provider = Uri.parse("content://com.chrisb588.easlie.test.images")
 
     @Before fun prepare() {
@@ -50,7 +51,8 @@ class FloatingBoardRedesignTest {
     private fun host(width: Int = 280, height: Int = 248) {
         rule.setContent { EaslieTheme {
             Box(Modifier.size(width.dp, height.dp)) {
-                FloatingBoardUi(board, { returned++ }, { closed++ }, { imports++ }, { creates++ })
+                FloatingBoardUi(board, { returned++ }, { closed++ }, { imports++ }, { creates++ },
+                    controlsVisible = controlsVisible.value)
             }
         } }
     }
@@ -103,9 +105,41 @@ class FloatingBoardRedesignTest {
         assertTrue(warning.bottom <= deselect.top)
         val canvas = rule.onNodeWithTag(CanvasTestTags.FloatingBoard).fetchSemanticsNode().boundsInRoot
         assertEquals(canvas.center.x, deselect.center.x, 1f)
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { controlsVisible.value = false }
+        rule.mainClock.advanceTimeBy(400)
+        rule.onNodeWithContentDescription("Open board").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Return to full-screen mode").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Close floating board").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Add images").assertDoesNotExist()
+        rule.onNodeWithText("Fixture warning").assertIsDisplayed()
+        rule.onNodeWithTag(CanvasTestTags.Deselect).assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(6500)
+        rule.onNodeWithText("Fixture warning").assertDoesNotExist()
         rule.onNodeWithTag(CanvasTestTags.Deselect).performClick()
+        rule.mainClock.advanceTimeByFrame()
         rule.onNodeWithTag(CanvasTestTags.Deselect).assertDoesNotExist()
         rule.runOnIdle { assertEquals(image, board.items.single()) }
+    }
+    @Test fun persistentImportRetrySurvivesHiddenControlsAndNoticeExpiry() {
+        host()
+        val resolver = rule.activity.contentResolver
+        resolver.call(provider, "create-task-fixtures", null, null)
+        resolver.call(provider, "fail-next-read", "task-first.png", null)
+        rule.waitUntil(5000) { board.windowSize.width > 0f }
+        rule.runOnIdle {
+            board.enqueueImport(resolver, listOf(Uri.withAppendedPath(provider, "task-first.png")), floatingMode = true)
+        }
+        rule.waitUntil(5000) { !board.importing && board.canRetryImport }
+        rule.mainClock.autoAdvance = false
+        rule.runOnIdle { controlsVisible.value = false }
+        rule.mainClock.advanceTimeBy(6500)
+        rule.onNodeWithContentDescription("Close floating board").assertDoesNotExist()
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithContentDescription("Retry failed images").performScrollTo().assertIsDisplayed().performClick()
+        rule.waitUntil(5000) { !board.importing && board.items.size == 1 && !board.canRetryImport }
+        rule.mainClock.advanceTimeByFrame()
+        rule.onNodeWithContentDescription("Retry failed images").assertDoesNotExist()
     }
     @Test fun floatingImportUsesFloatingViewportAndLeavesFullscreenViewportUntouched() {
         host(360, 300)
